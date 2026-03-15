@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CompletionContext } from '@codemirror/autocomplete';
+import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { wikiLinkSource } from './wikiLinkCompletion';
 
 function makeCtx(line: string, cursorInLine: number, explicit = false, suffix = '') {
@@ -24,10 +24,10 @@ describe('wikiLinkSource', () => {
     const result = source(ctx);
 
     expect(result).not.toBeNull();
-    const labels = (result as NonNullable<typeof result>).options.map((o) => o.label);
+    const labels = (result as CompletionResult).options.map((o) => o.label);
     expect(labels).toContain('foo');
     expect(labels).toContain('bar');
-    expect((result as NonNullable<typeof result>).from).toBe(2);
+    expect((result as CompletionResult).from).toBe(2);
   });
 
   it('filters out non-matching options when query is provided', () => {
@@ -36,11 +36,11 @@ describe('wikiLinkSource', () => {
     const result = source(ctx);
 
     expect(result).not.toBeNull();
-    const options = (result as NonNullable<typeof result>).options;
+    const options = (result as CompletionResult).options;
     const labels = options.map((o) => o.label);
     expect(labels).toContain('foo');
     expect(labels).not.toContain('bar');
-    expect((result as NonNullable<typeof result>).from).toBe(2);
+    expect((result as CompletionResult).from).toBe(2);
   });
 
   it('filters by partial match case-insensitively', () => {
@@ -49,7 +49,7 @@ describe('wikiLinkSource', () => {
     const result = source(ctx);
 
     expect(result).not.toBeNull();
-    const options = (result as NonNullable<typeof result>).options;
+    const options = (result as CompletionResult).options;
     const labels = options.map((o) => o.label);
     expect(labels).toContain('foo');
     expect(labels).not.toContain('bar');
@@ -61,7 +61,7 @@ describe('wikiLinkSource', () => {
     const result = source(ctx);
 
     expect(result).not.toBeNull();
-    const options = (result as NonNullable<typeof result>).options;
+    const options = (result as CompletionResult).options;
     const todoOptions = options.filter((o) => o.label === 'todo');
     expect(todoOptions).toHaveLength(1);
   });
@@ -72,7 +72,7 @@ describe('wikiLinkSource', () => {
     const result = source(ctx);
 
     expect(result).not.toBeNull();
-    const options = (result as NonNullable<typeof result>).options;
+    const options = (result as CompletionResult).options;
     const fooOption = options.find((o) => o.label === 'foo');
     expect(fooOption?.apply).toBe('foo]]');
   });
@@ -83,7 +83,7 @@ describe('wikiLinkSource', () => {
     const result = source(ctx);
 
     expect(result).not.toBeNull();
-    const options = (result as NonNullable<typeof result>).options;
+    const options = (result as CompletionResult).options;
     const fooOption = options.find((o) => o.label === 'foo');
     expect(fooOption?.apply).toBe('foo');
   });
