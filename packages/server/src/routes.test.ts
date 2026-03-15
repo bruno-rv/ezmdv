@@ -299,6 +299,73 @@ describe('API Routes', () => {
     await watcher.close();
   });
 
+  it('POST /api/projects/:id/upload rejects path traversal', async () => {
+    const uploadDir = path.join(tmpDir, 'uploads', 'test-project');
+    fs.mkdirSync(uploadDir, { recursive: true });
+
+    const state: AppState = {
+      theme: 'light',
+      projects: [
+        {
+          id: 'p1',
+          name: 'Test',
+          source: 'upload',
+          path: uploadDir,
+          lastOpened: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      openTabs: [],
+      checkboxStates: {},
+    };
+    writeState(state, statePath);
+
+    // Create a temp file to upload
+    const tmpFile = path.join(tmpDir, 'evil.md');
+    fs.writeFileSync(tmpFile, '# Evil file');
+
+    const { app, watcher } = createServer({ statePath });
+    const res = await request(app)
+      .post('/api/projects/p1/upload')
+      .attach('files', tmpFile)
+      .field('relativePaths', JSON.stringify(['../../evil.txt']));
+
+    expect(res.status).toBe(200);
+    // The traversal file should NOT have been saved
+    expect(res.body.uploaded).toEqual([]);
+
+    // Verify the file was NOT written outside the upload dir
+    expect(fs.existsSync(path.join(uploadDir, '..', '..', 'evil.txt'))).toBe(false);
+    await watcher.close();
+  });
+
+  it('GET /api/projects/:id/files/* returns 403 for path traversal', async () => {
+    const state: AppState = {
+      theme: 'light',
+      projects: [
+        {
+          id: 'p1',
+          name: 'Test',
+          source: 'cli',
+          path: projectDir,
+          lastOpened: '2024-01-01T00:00:00.000Z',
+        },
+      ],
+      openTabs: [],
+      checkboxStates: {},
+    };
+    writeState(state, statePath);
+
+    const { app, watcher } = createServer({ statePath });
+    // Use URL-encoded slashes to bypass Express path normalization
+    const res = await request(app).get(
+      '/api/projects/p1/files/..%2F..%2Fetc%2Fpasswd',
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('Access denied');
+    await watcher.close();
+  });
+
   it('server starts and responds to requests (smoke test)', async () => {
     const { app, server, watcher } = createServer({ statePath });
 

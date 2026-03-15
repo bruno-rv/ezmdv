@@ -28,12 +28,15 @@ export function createServer(options: ServerOptions = {}): ServerInstance {
   // Middleware
   app.use(express.json());
 
-  // CORS
-  app.use((_req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
+  // CORS — restrict to localhost origins only
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      res.header('Access-Control-Allow-Origin', origin);
+    }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (_req.method === 'OPTIONS') {
+    if (req.method === 'OPTIONS') {
       res.sendStatus(204);
       return;
     }

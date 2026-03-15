@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { readState, updateState } from '../state.js';
+import { readState, updateState, type AppState } from '../state.js';
 
 export function createStateRoutes(statePath?: string): Router {
   const router = Router();
@@ -12,8 +12,12 @@ export function createStateRoutes(statePath?: string): Router {
 
   // PATCH /api/state — merge partial state update
   router.patch('/', (req: Request, res: Response) => {
-    const partial = req.body;
-    const updated = updateState(partial, statePath);
+    const { theme, openTabs, checkboxStates } = req.body;
+    const sanitized: Partial<AppState> = {};
+    if (theme === 'light' || theme === 'dark') sanitized.theme = theme;
+    if (Array.isArray(openTabs)) sanitized.openTabs = openTabs;
+    if (checkboxStates && typeof checkboxStates === 'object') sanitized.checkboxStates = checkboxStates;
+    const updated = updateState(sanitized, statePath);
     res.json(updated);
   });
 

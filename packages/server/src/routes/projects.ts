@@ -217,12 +217,21 @@ export function createProjectRoutes(statePath?: string): Router {
 
       const uploadDir = project.path;
       const savedFiles: string[] = [];
+      const resolvedUploadDir = path.resolve(uploadDir);
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const relativePath =
           relativePaths[i] || file.originalname;
         const destPath = path.join(uploadDir, relativePath);
+        const resolvedDest = path.resolve(destPath);
+
+        // Security: prevent path traversal
+        if (!resolvedDest.startsWith(resolvedUploadDir)) {
+          // Clean up the temp file and skip — path traversal attempt
+          fs.unlinkSync(file.path);
+          continue;
+        }
 
         // Ensure parent directory exists
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
