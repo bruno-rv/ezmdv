@@ -167,7 +167,7 @@ export function GraphPanel({
       if (!cancelled) setSearchMatches(new Set(res.results.map(r => r.filePath)));
       if (!cancelled) setSearching(false);
     }, 200);
-    return () => { cancelled = true; clearTimeout(id); setSearching(false); };
+    return () => { cancelled = true; clearTimeout(id); };
   }, [projectId, searchQuery]);
 
   const filteredGraph = useMemo(() => filterGraphBySearch(graph, searchMatches), [graph, searchMatches]);
@@ -204,6 +204,11 @@ export function GraphPanel({
     }
     return { connectedNodeIds, connectedEdgeKeys };
   }, [selectedNodeId, filteredGraph]);
+
+  const selectedNodeVisible = useMemo(
+    () => selectedNodeId !== null && (filteredGraph?.nodes.some(n => n.id === selectedNodeId) ?? false),
+    [selectedNodeId, filteredGraph],
+  );
 
   const handleNodeMouseDown = useCallback(
     (e: React.MouseEvent, nodeId: string) => {
@@ -437,7 +442,7 @@ export function GraphPanel({
         </div>
       )}
 
-      {selectedNodeId && (
+      {selectedNodeVisible && (
         <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
           Click node to select · Double-click to open file · Click background to clear
         </div>
