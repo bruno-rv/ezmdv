@@ -8,14 +8,12 @@ function formatSize(bytes: number): string {
 
 interface FileMetaTooltipProps {
   data: FileMetadata;
-  onMouseLeave?: () => void;
 }
 
-export function FileMetaTooltip({ data, onMouseLeave }: FileMetaTooltipProps) {
+export function FileMetaTooltip({ data }: FileMetaTooltipProps) {
   return (
     <div
       className="absolute left-0 top-full z-50 mt-1 min-w-48 rounded-md border border-border bg-popover p-3 shadow-lg"
-      onMouseLeave={onMouseLeave}
     >
       <div className="space-y-1 text-xs">
         <div className="font-medium text-foreground">{data.fileName}</div>

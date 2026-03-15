@@ -111,6 +111,7 @@ function App() {
   const [editorFilePaths, setEditorFilePaths] = useState<string[]>([]);
 
   const metaCacheRef = useRef<Map<string, FileMetadata>>(new Map());
+  const metaHoveredRef = useRef(false);
   const [metaTooltip, setMetaTooltip] = useState<{ filePath: string; data: FileMetadata } | null>(null);
 
   const primaryContent = paneStates.primary.content;
@@ -764,7 +765,11 @@ function App() {
               {tab.filePath}
             </span>
 
-            <div className="relative">
+            <div
+              className="relative"
+              onMouseEnter={() => { metaHoveredRef.current = true; }}
+              onMouseLeave={() => { metaHoveredRef.current = false; setMetaTooltip(null); }}
+            >
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -779,12 +784,13 @@ function App() {
                   try {
                     const data = await fetchFileMetadata(tab.projectId, tab.filePath);
                     metaCacheRef.current.set(cacheKey, data);
-                    setMetaTooltip({ filePath: tab.filePath, data });
+                    if (metaHoveredRef.current) {
+                      setMetaTooltip({ filePath: tab.filePath, data });
+                    }
                   } catch {
                     // ignore
                   }
                 }}
-                onMouseLeave={() => setMetaTooltip(null)}
                 aria-label="File info"
                 title="File info"
               >
@@ -793,7 +799,6 @@ function App() {
               {metaTooltip && metaTooltip.filePath === tab.filePath && (
                 <FileMetaTooltip
                   data={metaTooltip.data}
-                  onMouseLeave={() => setMetaTooltip(null)}
                 />
               )}
             </div>
@@ -949,7 +954,6 @@ function App() {
       handleSaveAndExit,
       handleSplitView,
       isDirty,
-      metaTooltip,
       paneStates,
       primaryTab,
       saving,
