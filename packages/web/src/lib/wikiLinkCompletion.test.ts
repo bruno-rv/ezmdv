@@ -18,16 +18,16 @@ function makeCtx(line: string, cursorInLine: number, explicit = false, suffix = 
 }
 
 describe('wikiLinkSource', () => {
-  it('detects [[ context and returns completions', () => {
+  it('returns all options when query is empty ([[)', () => {
     const source = wikiLinkSource(['notes/foo.md', 'notes/bar.md']);
-    const ctx = makeCtx('[[foo', 5);
+    const ctx = makeCtx('[[', 2);
     const result = source(ctx);
 
     expect(result).not.toBeNull();
-    const options = (result as NonNullable<typeof result>).options;
-    expect(options).toEqual(
-      expect.arrayContaining([expect.objectContaining({ label: 'foo' })]),
-    );
+    const labels = (result as NonNullable<typeof result>).options.map((o) => o.label);
+    expect(labels).toContain('foo');
+    expect(labels).toContain('bar');
+    expect((result as NonNullable<typeof result>).from).toBe(2);
   });
 
   it('filters out non-matching options when query is provided', () => {
@@ -40,6 +40,7 @@ describe('wikiLinkSource', () => {
     const labels = options.map((o) => o.label);
     expect(labels).toContain('foo');
     expect(labels).not.toContain('bar');
+    expect((result as NonNullable<typeof result>).from).toBe(2);
   });
 
   it('filters by partial match case-insensitively', () => {
