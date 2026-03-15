@@ -20,6 +20,46 @@ export interface Tab {
   filePath: string;
 }
 
+export interface GraphNode {
+  id: string;
+  label: string;
+  filePath: string | null;
+  dangling: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  kind: 'wiki' | 'markdown';
+  rawTarget: string;
+}
+
+export interface ProjectGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface ProjectSearchResult {
+  filePath: string;
+  fileName: string;
+  preview: string;
+  matchCount: number;
+}
+
+export interface ProjectSearchResponse {
+  query: string;
+  results: ProjectSearchResult[];
+}
+
+export interface FileMetadata {
+  fileName: string;
+  sizeBytes: number;
+  lineCount: number;
+  createdAt: string;
+  modifiedAt: string;
+  owner: string;
+}
+
 export interface AppState {
   theme: 'light' | 'dark';
   projects: Project[];
@@ -68,6 +108,22 @@ export async function fetchFileContent(
     throw new Error(`API error ${res.status}: ${body}`);
   }
   return res.text();
+}
+
+export async function fetchProjectGraph(
+  projectId: string,
+): Promise<ProjectGraph> {
+  return request<ProjectGraph>(`/api/projects/${projectId}/graph`);
+}
+
+export async function searchProjectContent(
+  projectId: string,
+  query: string,
+): Promise<ProjectSearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  return request<ProjectSearchResponse>(
+    `/api/projects/${projectId}/search?${params.toString()}`,
+  );
 }
 
 export async function createProject(data: {
@@ -133,6 +189,15 @@ export async function uploadFiles(
     const body = await res.text();
     throw new Error(`Upload error ${res.status}: ${body}`);
   }
+}
+
+export async function fetchFileMetadata(
+  projectId: string,
+  filePath: string,
+): Promise<FileMetadata> {
+  return request<FileMetadata>(
+    `/api/projects/${projectId}/file-meta?path=${encodeURIComponent(filePath)}`,
+  );
 }
 
 export async function fetchState(): Promise<AppState> {

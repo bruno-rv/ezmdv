@@ -3,6 +3,7 @@ import {
   ArrowRightLeft,
   Columns2,
   Eye,
+  Info,
   Maximize2,
   Menu,
   Minimize2,
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Sidebar } from '@/components/Sidebar';
 import { TabBar } from '@/components/TabBar';
 import { MarkdownView } from '@/components/MarkdownView';
+import { FileMetaTooltip } from '@/components/FileMetaTooltip';
 import { GraphPanel } from '@/components/GraphPanel';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { cn } from '@/lib/utils';
@@ -26,11 +28,13 @@ import { useTabs, type Pane } from '@/hooks/useTabs';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import {
   fetchFileContent,
+  fetchFileMetadata,
   fetchProjectFiles,
   fetchProjectGraph,
   saveFileContent,
   uploadFiles,
   updateState,
+  type FileMetadata,
   type FileTreeEntry,
   type ProjectGraph,
   type Tab,
@@ -105,6 +109,9 @@ function App() {
   const [saving, setSaving] = useState(false);
   const editModeRef = useRef(false);
   const [editorFilePaths, setEditorFilePaths] = useState<string[]>([]);
+
+  const metaCacheRef = useRef<Map<string, FileMetadata>>(new Map());
+  const [metaTooltip, setMetaTooltip] = useState<{ filePath: string; data: FileMetadata } | null>(null);
 
   const primaryContent = paneStates.primary.content;
   const isDirty = !splitView && editMode && editContent !== primaryContent;
@@ -739,7 +746,7 @@ function App() {
           )}
           onClick={() => focusPane(pane)}
         >
-          <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+          <div className="relative flex items-center gap-2 border-b border-border px-4 py-2">
             {options.splitContext && (
               <span
                 className={cn(
@@ -756,6 +763,40 @@ function App() {
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
               {tab.filePath}
             </span>
+
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onMouseEnter={async (e) => {
+                  e.stopPropagation();
+                  const cacheKey = `${tab.projectId}:${tab.filePath}`;
+                  const cached = metaCacheRef.current.get(cacheKey);
+                  if (cached) {
+                    setMetaTooltip({ filePath: tab.filePath, data: cached });
+                    return;
+                  }
+                  try {
+                    const data = await fetchFileMetadata(tab.projectId, tab.filePath);
+                    metaCacheRef.current.set(cacheKey, data);
+                    setMetaTooltip({ filePath: tab.filePath, data });
+                  } catch {
+                    // ignore
+                  }
+                }}
+                onMouseLeave={() => setMetaTooltip(null)}
+                aria-label="File info"
+                title="File info"
+              >
+                <Info className="size-4" />
+              </Button>
+              {metaTooltip && metaTooltip.filePath === tab.filePath && (
+                <FileMetaTooltip
+                  data={metaTooltip.data}
+                  onMouseLeave={() => setMetaTooltip(null)}
+                />
+              )}
+            </div>
 
             {options.splitContext && (
               <Button
@@ -908,6 +949,7 @@ function App() {
       handleSaveAndExit,
       handleSplitView,
       isDirty,
+      metaTooltip,
       paneStates,
       primaryTab,
       saving,
