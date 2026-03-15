@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import {
+  ArrowRightLeft,
   Columns2,
   Eye,
   Maximize2,
@@ -12,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Sidebar } from '@/components/Sidebar';
 import { TabBar } from '@/components/TabBar';
 import { MarkdownView } from '@/components/MarkdownView';
+import { GraphPanel } from '@/components/GraphPanel';
 import { cn } from '@/lib/utils';
 
 const MarkdownEditor = lazy(() =>
@@ -24,16 +26,30 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import {
   fetchFileContent,
   fetchProjectFiles,
+  fetchProjectGraph,
   saveFileContent,
   uploadFiles,
   updateState,
   type FileTreeEntry,
+  type ProjectGraph,
   type Tab,
 } from '@/lib/api';
+import {
+  flattenFileTree,
+  resolveMarkdownPath,
+  resolveWikiLinkTarget,
+  type InternalLinkKind,
+} from '@/lib/markdownLinks';
 
 interface PaneContentState {
   content: string | null;
   loading: boolean;
+}
+
+interface PendingAnchor {
+  projectId: string;
+  filePath: string;
+  anchor: string;
 }
 
 const INITIAL_PANE_STATES: Record<Pane, PaneContentState> = {
@@ -70,17 +86,23 @@ function App() {
     enterSplitView,
     exitSplitView,
     setFullscreenPane,
+    swapPanes,
   } = useTabs();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [autoExpandProjectId, setAutoExpandProjectId] = useState<string | null>(null);
   const [paneStates, setPaneStates] = useState(INITIAL_PANE_STATES);
+  const [graphProjectId, setGraphProjectId] = useState<string | null>(null);
+  const [graphData, setGraphData] = useState<ProjectGraph | null>(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+  const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null);
 
   const [editMode, setEditMode] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
   const editModeRef = useRef(false);
+  const [editorFilePaths, setEditorFilePaths] = useState<string[]>([]);
 
   const primaryContent = paneStates.primary.content;
   const isDirty = !splitView && editMode && editContent !== primaryContent;
@@ -142,6 +164,49 @@ function App() {
     [setPaneContent, setPaneLoading],
   );
 
+  const getPaneTab = useCallback(
+    (pane: Pane) => (pane === 'primary' ? primaryTab : secondaryTab),
+    [primaryTab, secondaryTab],
+  );
+
+  const getProjectFilePaths = useCallback(
+    async (projectId: string): Promise<string[]> => {
+      const existing = projects.find((project) => project.id === projectId)?.files;
+      if (existing) {
+        return flattenFileTree(existing);
+      }
+
+      const fetched = await fetchProjectFiles(projectId);
+      return flattenFileTree(fetched);
+    },
+    [projects],
+  );
+
+  const openProjectFile = useCallback(
+    (
+      projectId: string,
+      filePath: string,
+      options?: {
+        closeGraph?: boolean;
+        anchor?: string | null;
+      },
+    ) => {
+      if (options?.closeGraph ?? true) {
+        setGraphProjectId(null);
+      }
+      if (options?.anchor) {
+        setPendingAnchor({
+          projectId,
+          filePath,
+          anchor: options.anchor,
+        });
+      }
+      openTab(projectId, filePath);
+      setSidebarOpen(false);
+    },
+    [openTab],
+  );
+
   useEffect(() => {
     editModeRef.current = editMode;
   }, [editMode]);
@@ -165,6 +230,15 @@ function App() {
     prevPrimaryTabRef.current = primaryTab;
   }, [primaryTab]);
 
+  useEffect(() => {
+    if (!editMode || !primaryTab) return;
+    let cancelled = false;
+    getProjectFilePaths(primaryTab.projectId).then((paths) => {
+      if (!cancelled) setEditorFilePaths(paths);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [editMode, primaryTab?.projectId, getProjectFilePaths]);
+
   useEffect(() => loadPaneContent('primary', primaryTab), [
     loadPaneContent,
     primaryTab?.filePath,
@@ -182,9 +256,40 @@ function App() {
     return loadPaneContent('secondary', secondaryTab);
   }, [
     loadPaneContent,
-    splitView,
     secondaryTab?.filePath,
     secondaryTab?.projectId,
+    splitView,
+  ]);
+
+  useEffect(() => {
+    if (!pendingAnchor) return;
+
+    const visiblePanes: Pane[] = ['primary', 'secondary'];
+    const matchingPane = visiblePanes.find((pane) => {
+      const tab = getPaneTab(pane);
+      if (!tab) return false;
+      return (
+        tab.projectId === pendingAnchor.projectId &&
+        tab.filePath === pendingAnchor.filePath
+      );
+    });
+
+    if (!matchingPane) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = document.getElementById(pendingAnchor.anchor);
+      if (element) {
+        element.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+      setPendingAnchor(null);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [
+    getPaneTab,
+    paneStates.primary.content,
+    paneStates.secondary.content,
+    pendingAnchor,
   ]);
 
   const handleFileChanged = useCallback(
@@ -211,8 +316,21 @@ function App() {
       }
 
       loadProjectFiles(projectId);
+
+      if (graphProjectId === projectId) {
+        fetchProjectGraph(projectId)
+          .then((graph) => setGraphData(graph))
+          .catch(() => {});
+      }
     },
-    [loadProjectFiles, primaryTab, secondaryTab, setPaneContent, splitView],
+    [
+      graphProjectId,
+      loadProjectFiles,
+      primaryTab,
+      secondaryTab,
+      setPaneContent,
+      splitView,
+    ],
   );
 
   useWebSocket({ onFileChanged: handleFileChanged });
@@ -352,33 +470,41 @@ function App() {
     switchToPrevTab,
   ]);
 
-  const getPaneTab = useCallback(
-    (pane: Pane) => (pane === 'primary' ? primaryTab : secondaryTab),
-    [primaryTab, secondaryTab],
-  );
-
   const handleFileClick = useCallback(
     (projectId: string, filePath: string) => {
-      openTab(projectId, filePath);
-      setSidebarOpen(false);
+      openProjectFile(projectId, filePath);
     },
-    [openTab],
+    [openProjectFile],
   );
 
   const handleLinkClick = useCallback(
-    (pane: Pane, filePath: string) => {
+    async (pane: Pane, target: string, kind: InternalLinkKind) => {
       const tab = getPaneTab(pane);
       if (!tab) return;
 
-      const currentDir = tab.filePath.includes('/')
-        ? tab.filePath.substring(0, tab.filePath.lastIndexOf('/'))
-        : '';
-      const resolvedPath = currentDir ? `${currentDir}/${filePath}` : filePath;
-
       focusPane(pane);
-      openTab(tab.projectId, resolvedPath);
+
+      if (kind === 'markdown') {
+        const [filePath, anchor] = target.split('#');
+        const resolvedPath = resolveMarkdownPath(tab.filePath, filePath);
+        openProjectFile(tab.projectId, resolvedPath, {
+          anchor: anchor || null,
+        });
+        return;
+      }
+
+      const [wikiTarget, anchor] = target.split('#');
+      const filePaths = await getProjectFilePaths(tab.projectId);
+      const resolvedPath = resolveWikiLinkTarget(wikiTarget, filePaths);
+      if (!resolvedPath) {
+        return;
+      }
+
+      openProjectFile(tab.projectId, resolvedPath, {
+        anchor: anchor || null,
+      });
     },
-    [focusPane, getPaneTab, openTab],
+    [focusPane, getPaneTab, getProjectFilePaths, openProjectFile],
   );
 
   const handleCheckboxChange = useCallback(
@@ -410,11 +536,15 @@ function App() {
       try {
         await removeProject(projectId);
         closeProjectTabs(projectId);
+        if (graphProjectId === projectId) {
+          setGraphProjectId(null);
+          setGraphData(null);
+        }
       } catch (error) {
         console.error('Delete failed:', error);
       }
     },
-    [closeProjectTabs, removeProject],
+    [closeProjectTabs, graphProjectId, removeProject],
   );
 
   const handleBulkDelete = useCallback(
@@ -424,11 +554,15 @@ function App() {
         for (const projectId of projectIds) {
           closeProjectTabs(projectId);
         }
+        if (graphProjectId && projectIds.includes(graphProjectId)) {
+          setGraphProjectId(null);
+          setGraphData(null);
+        }
       } catch (error) {
         console.error('Bulk delete failed:', error);
       }
     },
-    [closeProjectTabs, removeProjects],
+    [closeProjectTabs, graphProjectId, removeProjects],
   );
 
   const handleBulkOpen = useCallback(
@@ -455,14 +589,14 @@ function App() {
 
         for (const { id, files } of treesById) {
           for (const filePath of collectFiles(files)) {
-            openTab(id, filePath);
+            openProjectFile(id, filePath, { closeGraph: false });
           }
         }
       } catch (error) {
         console.error('Bulk open failed:', error);
       }
     },
-    [openTab],
+    [openProjectFile],
   );
 
   const handleUploadFiles = useCallback(
@@ -474,9 +608,9 @@ function App() {
         if (relativePaths && relativePaths.length > 0 && relativePaths[0].includes('/')) {
           const folderName = relativePaths[0].split('/')[0];
           projectName = folderName;
-          cleanedPaths = relativePaths.map((path) => {
-            const slashIndex = path.indexOf('/');
-            return slashIndex === -1 ? path : path.substring(slashIndex + 1);
+          cleanedPaths = relativePaths.map((filePath) => {
+            const slashIndex = filePath.indexOf('/');
+            return slashIndex === -1 ? filePath : filePath.substring(slashIndex + 1);
           });
         } else {
           const firstName = files[0]?.name ?? 'Uploaded Files';
@@ -531,6 +665,28 @@ function App() {
     }
     enterSplitView();
   }, [editMode, enterSplitView, isDirty]);
+
+  const handleOpenGraph = useCallback(async (projectId: string) => {
+    setGraphProjectId(projectId);
+    setGraphLoading(true);
+    try {
+      const graph = await fetchProjectGraph(projectId);
+      setGraphData(graph);
+    } catch (error) {
+      console.error('Graph load failed:', error);
+      setGraphData(null);
+    } finally {
+      setGraphLoading(false);
+    }
+  }, []);
+
+  const handleGraphNodeOpen = useCallback(
+    (filePath: string) => {
+      if (!graphProjectId) return;
+      openProjectFile(graphProjectId, filePath);
+    },
+    [graphProjectId, openProjectFile],
+  );
 
   const renderMarkdownPane = useCallback(
     (
@@ -706,6 +862,7 @@ function App() {
                   content={editContent}
                   theme={theme}
                   onChange={setEditContent}
+                  filePaths={editorFilePaths}
                 />
               </div>
             </Suspense>
@@ -713,7 +870,7 @@ function App() {
             <div className="flex-1 overflow-auto p-6">
               <MarkdownView
                 content={paneState.content}
-                onLinkClick={(filePath) => handleLinkClick(pane, filePath)}
+                onLinkClick={(target, kind) => handleLinkClick(pane, target, kind)}
                 onCheckboxChange={(index, checked) =>
                   handleCheckboxChange(pane, index, checked)
                 }
@@ -730,6 +887,7 @@ function App() {
     [
       editContent,
       editMode,
+      editorFilePaths,
       exitSplitView,
       focusPane,
       focusedPane,
@@ -754,6 +912,14 @@ function App() {
   const showSidebar = fullscreenPane === null;
   const showTopChrome = fullscreenPane === null;
   const fullscreenTarget = fullscreenPane ? getPaneTab(fullscreenPane) : null;
+  const graphProject = graphProjectId
+    ? projects.find((project) => project.id === graphProjectId) ?? null
+    : null;
+  const openFilePaths = new Set(
+    [primaryTab?.filePath, secondaryTab?.filePath].filter(
+      (filePath): filePath is string => Boolean(filePath),
+    ),
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground transition-colors duration-200">
@@ -775,6 +941,7 @@ function App() {
           collapsed={sidebarCollapsed}
           onClose={() => setSidebarOpen(false)}
           onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+          onOpenGraph={handleOpenGraph}
         />
       )}
 
@@ -812,8 +979,18 @@ function App() {
               splitContext: splitView,
             })}
           </div>
+        ) : graphProject ? (
+          <GraphPanel
+            projectName={graphProject.name}
+            projectId={graphProject.id}
+            graph={graphData}
+            loading={graphLoading}
+            openFilePaths={openFilePaths}
+            onClose={() => setGraphProjectId(null)}
+            onOpenFile={handleGraphNodeOpen}
+          />
         ) : splitView ? (
-          <div className="grid min-h-0 flex-1 gap-px bg-border md:grid-cols-2">
+          <div className="relative grid min-h-0 flex-1 gap-px bg-border md:grid-cols-2">
             <div className="min-h-0 bg-background">
               {renderMarkdownPane('primary', {
                 allowEdit: false,
@@ -826,6 +1003,20 @@ function App() {
                 splitContext: true,
               })}
             </div>
+            {primaryTab && secondaryTab && (
+              <div className="pointer-events-none absolute inset-x-0 top-3 hidden justify-center md:flex">
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="pointer-events-auto shadow-sm"
+                  onClick={swapPanes}
+                  aria-label="Swap panes"
+                  title="Swap panes"
+                >
+                  <ArrowRightLeft className="size-4" />
+                </Button>
+              </div>
+            )}
           </div>
         ) : primaryTab ? (
           <div className="flex min-h-0 flex-1 flex-col">
