@@ -1,0 +1,11 @@
+{
+  "name": "ezmdv",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Easy Markdown Viewer — browser-based markdown viewer launched from the CLI",
+  "workspaces": [
+    "packages/cli",
+    "packages/server",
+    "packages/web"
+  ]
+}
