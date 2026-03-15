@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { Fragment, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -47,12 +47,12 @@ export function ShortcutsModal({ onClose }: ShortcutsModalProps) {
 
         <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
           {SHORTCUTS.map(({ key, description }) => (
-            <React.Fragment key={key}>
+            <Fragment key={key}>
               <kbd className="whitespace-nowrap rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">
                 {key}
               </kbd>
               <span className="text-sm text-muted-foreground">{description}</span>
-            </React.Fragment>
+            </Fragment>
           ))}
         </div>
       </div>

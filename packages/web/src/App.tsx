@@ -385,6 +385,8 @@ function App() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (showShortcuts) return;
+
       const isMac = navigator.platform.toUpperCase().includes('MAC');
       const mod = isMac ? e.metaKey : e.ctrlKey;
 
@@ -471,6 +473,7 @@ function App() {
     primaryContent,
     primaryTab,
     setFullscreenPane,
+    showShortcuts,
     splitView,
     switchToNextTab,
     switchToPrevTab,
