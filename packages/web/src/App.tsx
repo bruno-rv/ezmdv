@@ -3,10 +3,11 @@ import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sidebar } from '@/components/Sidebar';
 import { TabBar } from '@/components/TabBar';
+import { MarkdownView } from '@/components/MarkdownView';
 import { useTheme } from '@/hooks/useTheme';
 import { useProjects } from '@/hooks/useProjects';
 import { useTabs } from '@/hooks/useTabs';
-import { fetchFileContent, uploadFiles } from '@/lib/api';
+import { fetchFileContent, uploadFiles, updateState } from '@/lib/api';
 
 function App() {
   const { theme, toggleTheme } = useTheme();
@@ -59,6 +60,34 @@ function App() {
       setSidebarOpen(false); // Close sidebar on mobile after click
     },
     [openTab],
+  );
+
+  const handleLinkClick = useCallback(
+    (filePath: string) => {
+      if (!activeTab) return;
+      // Resolve relative path against the current file's directory
+      const currentDir = activeTab.filePath.includes('/')
+        ? activeTab.filePath.substring(0, activeTab.filePath.lastIndexOf('/'))
+        : '';
+      const resolvedPath = currentDir
+        ? `${currentDir}/${filePath}`
+        : filePath;
+      openTab(activeTab.projectId, resolvedPath);
+    },
+    [activeTab, openTab],
+  );
+
+  const handleCheckboxChange = useCallback(
+    (index: number, checked: boolean) => {
+      if (!activeTab) return;
+      const key = `${activeTab.projectId}:${activeTab.filePath}`;
+      updateState({
+        checkboxStates: { [key]: { [String(index)]: checked } },
+      }).catch(() => {
+        // Silently fail
+      });
+    },
+    [activeTab],
   );
 
   const handleUploadFiles = useCallback(
@@ -134,9 +163,11 @@ function App() {
               <p className="text-muted-foreground text-sm">Loading...</p>
             </div>
           ) : activeTab && fileContent !== null ? (
-            <pre className="whitespace-pre-wrap font-mono text-sm leading-relaxed">
-              {fileContent}
-            </pre>
+            <MarkdownView
+              content={fileContent}
+              onLinkClick={handleLinkClick}
+              onCheckboxChange={handleCheckboxChange}
+            />
           ) : (
             <div className="flex items-center justify-center h-full">
               <p className="text-muted-foreground text-sm">
