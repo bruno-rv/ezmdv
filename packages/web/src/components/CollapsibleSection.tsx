@@ -44,13 +44,17 @@ export function CollapsibleSection({ level, children, id }: CollapsibleSectionPr
       <Tag
         id={id}
         className="group flex items-center gap-1 cursor-pointer select-none"
-        onClick={toggle}
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          toggle();
+        }}
         role="button"
         tabIndex={0}
         aria-expanded={!collapsed}
         onKeyDown={(e: React.KeyboardEvent) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
+            e.stopPropagation();
             toggle();
           }
         }}

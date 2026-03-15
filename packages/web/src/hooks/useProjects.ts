@@ -4,6 +4,8 @@ import {
   fetchProjectFiles,
   createProject,
   uploadFiles,
+  deleteProject,
+  renameProject as apiRenameProject,
   type Project,
   type FileTreeEntry,
 } from '@/lib/api';
@@ -71,10 +73,28 @@ export function useProjects() {
     [],
   );
 
+  const renameProject = useCallback(async (projectId: string, name: string) => {
+    const updated = await apiRenameProject(projectId, name);
+    setProjects((prev) =>
+      prev.map((p) => (p.id === projectId ? { ...p, name: updated.name } : p)),
+    );
+  }, []);
+
+  const removeProject = useCallback(async (projectId: string) => {
+    await deleteProject(projectId);
+    setProjects((prev) => prev.filter((p) => p.id !== projectId));
+  }, []);
+
+  const removeProjects = useCallback(async (projectIds: string[]) => {
+    await Promise.all(projectIds.map((id) => deleteProject(id)));
+    const idSet = new Set(projectIds);
+    setProjects((prev) => prev.filter((p) => !idSet.has(p.id)));
+  }, []);
+
   const uploadToProject = useCallback(
     async (
       projectId: string,
-      files: FileList,
+      files: File[],
       relativePaths?: string[],
     ) => {
       await uploadFiles(projectId, files, relativePaths);
@@ -90,6 +110,9 @@ export function useProjects() {
     loadProjects,
     loadProjectFiles,
     addProject,
+    renameProject,
+    removeProject,
+    removeProjects,
     uploadToProject,
   };
 }

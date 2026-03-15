@@ -13,6 +13,19 @@ interface FileTreeEntry {
   children?: FileTreeEntry[];
 }
 
+const IGNORED_DIRS = new Set([
+  'node_modules',
+  '.git',
+  '.ezmdv',
+  'dist',
+  '.next',
+  '.nuxt',
+  '.svelte-kit',
+  '__pycache__',
+  '.venv',
+  'vendor',
+]);
+
 function listMarkdownFiles(
   dirPath: string,
   basePath: string,
@@ -31,6 +44,7 @@ function listMarkdownFiles(
     const relativePath = path.relative(basePath, fullPath);
 
     if (item.isDirectory()) {
+      if (IGNORED_DIRS.has(item.name)) continue;
       const children = listMarkdownFiles(fullPath, basePath);
       if (children.length > 0) {
         entries.push({
@@ -127,6 +141,94 @@ export function createProjectRoutes(statePath?: string): Router {
     res.status(201).json(project);
   });
 
+  // PATCH /api/projects/:id — update project metadata (e.g. rename)
+  router.patch('/:id', (req: Request, res: Response) => {
+    const state = readState(statePath);
+    const project = state.projects.find((p) => p.id === req.params.id);
+
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const { name } = req.body as { name?: string };
+    if (name && typeof name === 'string') {
+      project.name = name.trim();
+    }
+
+    updateState({ projects: state.projects }, statePath);
+    res.json(project);
+  });
+
+  // DELETE /api/projects/:id — delete a project
+  router.delete('/:id', (req: Request, res: Response) => {
+    const state = readState(statePath);
+    const projectIdx = state.projects.findIndex((p) => p.id === req.params.id);
+
+    if (projectIdx === -1) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const project = state.projects[projectIdx];
+
+    // For upload projects, move files to trash instead of deleting
+    if (project.source === 'upload') {
+      const uploadsRoot = path.resolve(path.join(os.homedir(), '.ezmdv', 'uploads'));
+      const resolvedProjectPath = path.resolve(project.path);
+      if (resolvedProjectPath.startsWith(uploadsRoot + path.sep)) {
+        try {
+          const trashDir = path.join(os.homedir(), '.ezmdv', 'trash', project.id);
+          fs.mkdirSync(trashDir, { recursive: true });
+          fs.renameSync(project.path, path.join(trashDir, 'files'));
+          // Write metadata so we know what this was
+          fs.writeFileSync(
+            path.join(trashDir, 'meta.json'),
+            JSON.stringify({
+              name: project.name,
+              source: project.source,
+              deletedAt: new Date().toISOString(),
+            }),
+            'utf-8',
+          );
+        } catch {
+          // Fallback: if move fails (cross-device), delete directly
+          try {
+            fs.rmSync(project.path, { recursive: true, force: true });
+          } catch {
+            // Best effort
+          }
+        }
+      }
+    }
+
+    // Remove project from state
+    state.projects.splice(projectIdx, 1);
+
+    // Close any open tabs belonging to this project
+    state.openTabs = state.openTabs.filter(
+      (t) => t.projectId !== project.id,
+    );
+
+    // Clean up checkbox states for this project
+    for (const key of Object.keys(state.checkboxStates)) {
+      if (key.startsWith(`${project.id}:`)) {
+        delete state.checkboxStates[key];
+      }
+    }
+
+    updateState(
+      {
+        projects: state.projects,
+        openTabs: state.openTabs,
+        checkboxStates: state.checkboxStates,
+      },
+      statePath,
+    );
+
+    res.json({ deleted: true });
+  });
+
   // GET /api/projects/:id/files — list .md files in project directory
   router.get('/:id/files', (req: Request, res: Response) => {
     const state = readState(statePath);
@@ -177,6 +279,49 @@ export function createProjectRoutes(statePath?: string): Router {
       res.type('text/plain').send(content);
     } catch {
       res.status(404).json({ error: 'File not found' });
+    }
+  });
+
+  // PUT /api/projects/:id/files/* — update a specific markdown file
+  router.put('/:id/files/*filePath', (req: Request, res: Response) => {
+    const state = readState(statePath);
+    const project = state.projects.find((p) => p.id === req.params.id);
+
+    if (!project) {
+      res.status(404).json({ error: 'Project not found' });
+      return;
+    }
+
+    const rawFilePath = (req.params as Record<string, string | string[]>).filePath;
+    const filePath = Array.isArray(rawFilePath)
+      ? rawFilePath.join('/')
+      : rawFilePath;
+    if (!filePath) {
+      res.status(400).json({ error: 'File path is required' });
+      return;
+    }
+
+    const fullPath = path.join(project.path, filePath);
+
+    // Security: ensure the resolved path is within the project directory
+    const resolved = path.resolve(fullPath);
+    const projectRoot = path.resolve(project.path);
+    if (!resolved.startsWith(projectRoot)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    const { content } = req.body as { content: string };
+    if (typeof content !== 'string') {
+      res.status(400).json({ error: 'content (string) is required' });
+      return;
+    }
+
+    try {
+      fs.writeFileSync(fullPath, content, 'utf-8');
+      res.json({ saved: true });
+    } catch {
+      res.status(500).json({ error: 'Failed to write file' });
     }
   });
 

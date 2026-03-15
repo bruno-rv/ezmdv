@@ -5,11 +5,13 @@ import type { Tab } from '@/lib/api';
 interface TabBarProps {
   tabs: Tab[];
   activeTab: Tab | null;
+  primaryTab: Tab | null;
+  secondaryTab: Tab | null;
+  splitView: boolean;
   onTabClick: (projectId: string, filePath: string) => void;
   onTabClose: (projectId: string, filePath: string) => void;
 }
 
-// Generate a consistent color index for a project ID
 const PROJECT_COLORS = [
   'border-blue-500',
   'border-emerald-500',
@@ -34,9 +36,20 @@ function getFileName(filePath: string): string {
   return parts[parts.length - 1];
 }
 
+function isSameTab(a: Tab | null, b: Tab): boolean {
+  return Boolean(
+    a &&
+      a.projectId === b.projectId &&
+      a.filePath === b.filePath,
+  );
+}
+
 export function TabBar({
   tabs,
   activeTab,
+  primaryTab,
+  secondaryTab,
+  splitView,
   onTabClick,
   onTabClose,
 }: TabBarProps) {
@@ -44,13 +57,14 @@ export function TabBar({
 
   return (
     <div
-      className="flex border-b border-border bg-muted/30 overflow-x-auto"
+      className="flex overflow-x-auto border-b border-border bg-muted/30"
       role="tablist"
     >
       {tabs.map((tab) => {
-        const isActive =
-          activeTab?.projectId === tab.projectId &&
-          activeTab?.filePath === tab.filePath;
+        const isActive = isSameTab(activeTab, tab);
+        const isPrimary = isSameTab(primaryTab, tab);
+        const isSecondary = isSameTab(secondaryTab, tab);
+        const isVisibleInPane = isPrimary || isSecondary;
         const colorClass = getProjectColor(tab.projectId);
 
         return (
@@ -59,18 +73,34 @@ export function TabBar({
             role="tab"
             aria-selected={isActive}
             className={cn(
-              'group flex items-center gap-1.5 px-3 py-1.5 text-sm cursor-pointer border-b-2 transition-colors shrink-0',
+              'group flex shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-3 py-1.5 text-sm transition-colors',
               isActive
                 ? `${colorClass} bg-background text-foreground`
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50',
+                : isVisibleInPane
+                  ? 'border-border bg-background/70 text-foreground'
+                  : 'border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground',
             )}
             onClick={() => onTabClick(tab.projectId, tab.filePath)}
           >
             <span className="truncate max-w-[150px]">
               {getFileName(tab.filePath)}
             </span>
+
+            {splitView && isVisibleInPane && (
+              <span
+                className={cn(
+                  'rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                  isActive
+                    ? 'border-primary/30 bg-primary/10 text-primary'
+                    : 'border-border bg-muted/60 text-muted-foreground',
+                )}
+              >
+                {isPrimary ? 'L' : 'R'}
+              </span>
+            )}
+
             <button
-              className="ml-0.5 rounded p-0.5 opacity-0 group-hover:opacity-100 hover:bg-muted transition-opacity"
+              className="ml-0.5 rounded p-0.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
               onClick={(e) => {
                 e.stopPropagation();
                 onTabClose(tab.projectId, tab.filePath);

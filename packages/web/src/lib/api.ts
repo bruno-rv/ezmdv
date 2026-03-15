@@ -81,14 +81,43 @@ export async function createProject(data: {
   });
 }
 
+export async function renameProject(
+  projectId: string,
+  name: string,
+): Promise<Project> {
+  return request<Project>(`/api/projects/${projectId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteProject(
+  projectId: string,
+): Promise<void> {
+  await request(`/api/projects/${projectId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function saveFileContent(
+  projectId: string,
+  filePath: string,
+  content: string,
+): Promise<void> {
+  await request(`/api/projects/${projectId}/files/${filePath}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  });
+}
+
 export async function uploadFiles(
   projectId: string,
-  files: FileList,
+  files: File[],
   relativePaths?: string[],
 ): Promise<void> {
   const formData = new FormData();
-  for (let i = 0; i < files.length; i++) {
-    formData.append('files', files[i]);
+  for (const file of files) {
+    formData.append('files', file);
   }
   if (relativePaths) {
     formData.append('relativePaths', JSON.stringify(relativePaths));
