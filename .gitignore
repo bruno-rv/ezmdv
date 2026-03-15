@@ -3,4 +3,5 @@ dist
 .env
 .superpowers
 .ezmdv
+.claude/settings.local.json
 *.tsbuildinfo
