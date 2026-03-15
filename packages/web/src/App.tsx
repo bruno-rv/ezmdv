@@ -7,6 +7,7 @@ import { MarkdownView } from '@/components/MarkdownView';
 import { useTheme } from '@/hooks/useTheme';
 import { useProjects } from '@/hooks/useProjects';
 import { useTabs } from '@/hooks/useTabs';
+import { useWebSocket } from '@/hooks/useWebSocket';
 import { fetchFileContent, uploadFiles, updateState } from '@/lib/api';
 
 function App() {
@@ -17,7 +18,7 @@ function App() {
     loadProjectFiles,
     addProject,
   } = useProjects();
-  const { tabs, activeTab, openTab, closeTab, switchTab } = useTabs();
+  const { tabs, activeTab, openTab, closeTab, switchTab, switchToNextTab, switchToPrevTab } = useTabs();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -53,6 +54,73 @@ function App() {
       cancelled = true;
     };
   }, [activeTab?.projectId, activeTab?.filePath]);
+
+  // Live reload via WebSocket
+  const handleFileChanged = useCallback(
+    (projectId: string, filePath: string) => {
+      // If the changed file is currently displayed, re-fetch its content
+      if (
+        activeTab &&
+        activeTab.projectId === projectId &&
+        activeTab.filePath === filePath
+      ) {
+        fetchFileContent(projectId, filePath)
+          .then((content) => setFileContent(content))
+          .catch(() => {
+            // Silently fail on refresh
+          });
+      }
+      // Refresh the file tree for the affected project
+      loadProjectFiles(projectId);
+    },
+    [activeTab, loadProjectFiles],
+  );
+
+  useWebSocket({ onFileChanged: handleFileChanged });
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Don't intercept when user is typing in an input/textarea
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+
+      // Ctrl/Cmd + W: close active tab
+      if (mod && e.key === 'w') {
+        e.preventDefault();
+        if (activeTab) {
+          closeTab(activeTab.projectId, activeTab.filePath);
+        }
+        return;
+      }
+
+      // Ctrl/Cmd + ]: next tab
+      if (mod && e.key === ']') {
+        e.preventDefault();
+        switchToNextTab();
+        return;
+      }
+
+      // Ctrl/Cmd + [: previous tab
+      if (mod && e.key === '[') {
+        e.preventDefault();
+        switchToPrevTab();
+        return;
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, closeTab, switchToNextTab, switchToPrevTab]);
 
   const handleFileClick = useCallback(
     (projectId: string, filePath: string) => {
@@ -100,10 +168,10 @@ function App() {
             ? firstName.replace(/\.md$/i, '')
             : `Upload ${new Date().toLocaleDateString()}`;
 
-        // Use a temp path — the server handles creating the upload dir
+        // Server auto-generates the upload path for upload projects
         const project = await addProject({
           name: projectName,
-          path: `/tmp/ezmdv-upload-${Date.now()}`,
+          path: '',
           source: 'upload',
         });
 

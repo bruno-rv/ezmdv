@@ -1,4 +1,4 @@
-import { useState, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 interface CollapsibleSectionProps {
@@ -9,15 +9,38 @@ interface CollapsibleSectionProps {
 
 export function CollapsibleSection({ level, children, id }: CollapsibleSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const sectionRef = useRef<HTMLDivElement>(null);
 
   const toggle = useCallback(() => {
     setCollapsed((prev) => !prev);
   }, []);
 
+  // DOM manipulation to hide/show siblings until next heading of same or higher level
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    let sibling = section.nextElementSibling;
+    while (sibling) {
+      // Stop at next heading of same or higher level
+      if (sibling.classList.contains('collapsible-section')) {
+        const sibLevel = Number(sibling.getAttribute('data-level'));
+        if (sibLevel <= level) break;
+      }
+      (sibling as HTMLElement).style.display = collapsed ? 'none' : '';
+      sibling = sibling.nextElementSibling;
+    }
+  }, [collapsed, level]);
+
   const Tag = `h${level}` as keyof JSX.IntrinsicElements;
 
   return (
-    <div className="collapsible-section" data-level={level}>
+    <div
+      className="collapsible-section"
+      data-level={level}
+      data-collapsed={collapsed ? 'true' : 'false'}
+      ref={sectionRef}
+    >
       <Tag
         id={id}
         className="group flex items-center gap-1 cursor-pointer select-none"

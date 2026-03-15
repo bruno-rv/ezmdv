@@ -77,6 +77,40 @@ describe('API Routes', () => {
     await watcher.close();
   });
 
+  it('POST /api/projects auto-generates path for upload source', async () => {
+    const { app, watcher } = createServer({ statePath });
+
+    const res = await request(app)
+      .post('/api/projects')
+      .send({ name: 'My Upload', path: '', source: 'upload' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.name).toBe('My Upload');
+    expect(res.body.source).toBe('upload');
+    // Path should be under ~/.ezmdv/uploads/
+    expect(res.body.path).toContain('.ezmdv');
+    expect(res.body.path).toContain('uploads');
+    expect(res.body.path).toContain('My Upload');
+
+    // Verify the directory was created
+    expect(fs.existsSync(res.body.path)).toBe(true);
+
+    // Clean up
+    fs.rmSync(res.body.path, { recursive: true, force: true });
+    await watcher.close();
+  });
+
+  it('POST /api/projects returns 400 for cli source without path', async () => {
+    const { app, watcher } = createServer({ statePath });
+
+    const res = await request(app)
+      .post('/api/projects')
+      .send({ name: 'CLI Project', source: 'cli' });
+
+    expect(res.status).toBe(400);
+    await watcher.close();
+  });
+
   it('GET /api/projects/:id/files lists markdown files', async () => {
     // Create some files in the project dir
     fs.writeFileSync(path.join(projectDir, 'README.md'), '# Hello');

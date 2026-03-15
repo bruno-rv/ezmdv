@@ -96,11 +96,43 @@ export function useTabs() {
     [],
   );
 
+  const switchToNextTab = useCallback(() => {
+    setTabs((prev) => {
+      if (prev.length <= 1) return prev;
+      setActiveTab((current) => {
+        if (!current) return prev[0];
+        const idx = prev.findIndex(
+          (t) => t.projectId === current.projectId && t.filePath === current.filePath,
+        );
+        const nextIdx = (idx + 1) % prev.length;
+        return prev[nextIdx];
+      });
+      return prev;
+    });
+  }, []);
+
+  const switchToPrevTab = useCallback(() => {
+    setTabs((prev) => {
+      if (prev.length <= 1) return prev;
+      setActiveTab((current) => {
+        if (!current) return prev[prev.length - 1];
+        const idx = prev.findIndex(
+          (t) => t.projectId === current.projectId && t.filePath === current.filePath,
+        );
+        const prevIdx = (idx - 1 + prev.length) % prev.length;
+        return prev[prevIdx];
+      });
+      return prev;
+    });
+  }, []);
+
   return {
     tabs,
     activeTab,
     openTab,
     closeTab,
     switchTab,
+    switchToNextTab,
+    switchToPrevTab,
   };
 }

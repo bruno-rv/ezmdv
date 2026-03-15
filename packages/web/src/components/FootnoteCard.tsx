@@ -2,10 +2,11 @@ import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 
 interface FootnoteCardProps {
   id: string;
+  content: ReactNode;
   children: ReactNode;
 }
 
-export function FootnoteCard({ id, children }: FootnoteCardProps) {
+export function FootnoteCard({ id, content, children }: FootnoteCardProps) {
   const [visible, setVisible] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number }>({
     top: 0,
@@ -70,7 +71,7 @@ export function FootnoteCard({ id, children }: FootnoteCardProps) {
           className="fixed z-50 max-w-[300px] rounded-lg border border-border bg-popover p-3 text-sm text-popover-foreground shadow-lg"
           style={{ top: position.top, left: position.left }}
         >
-          Footnote {id}
+          {content}
         </div>
       )}
     </>

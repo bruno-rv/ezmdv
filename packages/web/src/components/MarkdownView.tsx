@@ -1,9 +1,10 @@
-import { useMemo, useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { useMemo, useRef, useState, useCallback, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { CodeBlock } from './CodeBlock';
 import { CollapsibleSection } from './CollapsibleSection';
+import { FootnoteCard } from './FootnoteCard';
 
 interface MarkdownViewProps {
   content: string;
@@ -27,6 +28,42 @@ export function MarkdownView({
   // Track whether we're inside a pre block to distinguish fenced code from inline code
   const insidePreRef = useRef(false);
 
+  // Track footnote definitions extracted from the DOM
+  const [footnoteMap, setFootnoteMap] = useState<Record<string, string>>({});
+
+  // Ref callback for the markdown container to extract footnote definitions
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    // Extract footnote definitions from the rendered GFM footnote section
+    const footnotesSection = node.querySelector('[data-footnotes]') ?? node.querySelector('.footnotes');
+    if (!footnotesSection) return;
+
+    const map: Record<string, string> = {};
+    const listItems = footnotesSection.querySelectorAll('li[id]');
+    for (const li of listItems) {
+      // GFM footnote li ids are like "user-content-fn-<label>"
+      const id = li.getAttribute('id') ?? '';
+      const match = id.match(/fn-(.+)$/);
+      if (match) {
+        // Get text content excluding the back-reference link
+        const clone = li.cloneNode(true) as HTMLElement;
+        const backRef = clone.querySelector('.data-footnote-backref') ?? clone.querySelector('a[href^="#user-content-fnref"]');
+        if (backRef) backRef.remove();
+        map[match[1]] = clone.textContent?.trim() ?? '';
+      }
+    }
+
+    if (Object.keys(map).length > 0) {
+      setFootnoteMap((prev) => {
+        // Only update if something changed to avoid infinite re-render
+        const prevKeys = Object.keys(prev).sort().join(',');
+        const newKeys = Object.keys(map).sort().join(',');
+        if (prevKeys === newKeys) return prev;
+        return map;
+      });
+    }
+  }, []);
+
   const components = useMemo(() => {
     return {
       // pre: passthrough that sets a flag so code knows it's a fenced block
@@ -37,9 +74,6 @@ export function MarkdownView({
       }: ComponentPropsWithoutRef<'pre'> & { node?: unknown }) => {
         insidePreRef.current = true;
         const result = <div {...props}>{children}</div>;
-        // We can't unset synchronously here because children render during this call.
-        // Instead, reset it after a microtask. But a simpler approach:
-        // just always set it before returning — the code component checks it inline.
         return result;
       },
 
@@ -77,13 +111,27 @@ export function MarkdownView({
         );
       },
 
-      // Links: intercept .md links for internal navigation
+      // Links: intercept .md links for internal navigation, and add footnote hover behavior
       a: ({
         href,
         children,
         node: _node,
         ...props
       }: ComponentPropsWithoutRef<'a'> & { node?: unknown }) => {
+        // Check if this is a footnote reference link (href like #user-content-fn-<label>)
+        const footnoteRefMatch = href?.match(/#user-content-fn-(.+)$/);
+        if (footnoteRefMatch) {
+          const fnId = footnoteRefMatch[1];
+          const fnContent = footnoteMap[fnId];
+          if (fnContent) {
+            return (
+              <FootnoteCard id={fnId} content={fnContent}>
+                {children}
+              </FootnoteCard>
+            );
+          }
+        }
+
         if (href && isMarkdownLink(href)) {
           return (
             <a
@@ -148,11 +196,30 @@ export function MarkdownView({
       h4: createHeadingComponent(4),
       h5: createHeadingComponent(5),
       h6: createHeadingComponent(6),
+
+      // Hide the default footnote section (we show footnotes inline via tooltips)
+      section: ({
+        children,
+        node: _node,
+        ...props
+      }: ComponentPropsWithoutRef<'section'> & { node?: unknown; 'data-footnotes'?: boolean }) => {
+        // GFM renders footnote definitions in a <section data-footnotes>
+        const dataFootnotes = (props as Record<string, unknown>)['data-footnotes'];
+        if (dataFootnotes !== undefined) {
+          // Render hidden so we can extract content via DOM ref, but hide it visually
+          return (
+            <section {...props} data-footnotes="" className="sr-only" aria-hidden="true">
+              {children}
+            </section>
+          );
+        }
+        return <section {...props}>{children}</section>;
+      },
     };
-  }, [onLinkClick, onCheckboxChange]);
+  }, [onLinkClick, onCheckboxChange, footnoteMap]);
 
   return (
-    <div className="markdown-body prose prose-sm dark:prose-invert max-w-none">
+    <div className="markdown-body prose prose-sm dark:prose-invert max-w-none" ref={containerRef}>
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}

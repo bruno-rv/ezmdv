@@ -93,16 +93,30 @@ export function createProjectRoutes(statePath?: string): Router {
       source: 'cli' | 'upload';
     };
 
-    if (!name || !projectPath || !source) {
-      res.status(400).json({ error: 'name, path, and source are required' });
+    if (!name || !source) {
+      res.status(400).json({ error: 'name and source are required' });
       return;
+    }
+
+    // For upload projects, auto-generate the path under ~/.ezmdv/uploads/<name>/
+    let resolvedPath: string;
+    if (source === 'upload') {
+      const safeName = name.replace(/[^a-zA-Z0-9_\-. ]/g, '_');
+      resolvedPath = path.join(os.homedir(), '.ezmdv', 'uploads', safeName);
+      fs.mkdirSync(resolvedPath, { recursive: true });
+    } else {
+      if (!projectPath) {
+        res.status(400).json({ error: 'path is required for non-upload projects' });
+        return;
+      }
+      resolvedPath = projectPath;
     }
 
     const project: Project = {
       id: uuidv4(),
       name,
       source,
-      path: projectPath,
+      path: resolvedPath,
       lastOpened: new Date().toISOString(),
     };
 
