@@ -234,8 +234,12 @@ function App() {
     if (!editMode || !primaryTab) return;
     let cancelled = false;
     getProjectFilePaths(primaryTab.projectId).then((paths) => {
-      if (!cancelled) setEditorFilePaths(paths);
-    }).catch(() => {});
+      if (!cancelled) {
+        setEditorFilePaths(prev =>
+          prev.join('\0') === paths.join('\0') ? prev : paths
+        );
+      }
+    }).catch(() => { if (!cancelled) setEditorFilePaths([]); });
     return () => { cancelled = true; };
   }, [editMode, primaryTab?.projectId, getProjectFilePaths]);
 

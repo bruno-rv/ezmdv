@@ -15,6 +15,6 @@ export function wikiLinkSource(filePaths: string[]): CompletionSource {
       .filter((label, i, arr) => arr.indexOf(label) === i)
       .filter((label) => label.toLowerCase().includes(query))
       .map((label) => ({ label, apply: label + closeWith, type: 'text' }));
-    return { from: ctx.pos - (match?.[1].length ?? 0), options, validFor: /^[^\][]*/  };
+    return { from: ctx.pos - (match?.[1].length ?? 0), options, validFor: /^[^\][]*/ };
   };
 }
