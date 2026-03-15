@@ -97,3 +97,7 @@ ezmdv stores local application data under `~/.ezmdv/`:
 - Uploaded files stay on your machine.
 - The server only allows localhost origins.
 - There is currently no automated test suite in the repo.
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
