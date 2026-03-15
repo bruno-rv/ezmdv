@@ -14,6 +14,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { TabBar } from '@/components/TabBar';
 import { MarkdownView } from '@/components/MarkdownView';
 import { GraphPanel } from '@/components/GraphPanel';
+import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { cn } from '@/lib/utils';
 
 const MarkdownEditor = lazy(() =>
@@ -91,6 +92,7 @@ function App() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [autoExpandProjectId, setAutoExpandProjectId] = useState<string | null>(null);
   const [paneStates, setPaneStates] = useState(INITIAL_PANE_STATES);
   const [graphProjectId, setGraphProjectId] = useState<string | null>(null);
@@ -946,6 +948,7 @@ function App() {
           onClose={() => setSidebarOpen(false)}
           onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
           onOpenGraph={handleOpenGraph}
+          onShowShortcuts={() => setShowShortcuts(true)}
         />
       )}
 
@@ -1035,6 +1038,7 @@ function App() {
           </div>
         )}
       </main>
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
     </div>
   );
 }

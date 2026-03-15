@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -14,12 +14,19 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
+  Waypoints,
+  Keyboard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import type { ProjectWithFiles } from '@/hooks/useProjects';
-import type { Tab, FileTreeEntry } from '@/lib/api';
+import {
+  searchProjectContent,
+  type Tab,
+  type FileTreeEntry,
+} from '@/lib/api';
 
 interface SidebarProps {
   projects: ProjectWithFiles[];
@@ -38,6 +45,8 @@ interface SidebarProps {
   collapsed: boolean;
   onClose: () => void;
   onToggleCollapse: () => void;
+  onOpenGraph: (projectId: string) => void;
+  onShowShortcuts: () => void;
 }
 
 interface FileTreeNodeProps {
@@ -117,6 +126,148 @@ function FileTreeNode({
   );
 }
 
+function filterEntries(
+  entries: FileTreeEntry[],
+  matches: Set<string>,
+): FileTreeEntry[] {
+  const filtered: FileTreeEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.type === 'file') {
+      if (matches.has(entry.path)) {
+        filtered.push(entry);
+      }
+      continue;
+    }
+
+    const children = entry.children ? filterEntries(entry.children, matches) : [];
+    if (children.length > 0) {
+      filtered.push({
+        ...entry,
+        children,
+      });
+    }
+  }
+
+  return filtered;
+}
+
+interface ExpandedProjectContentProps {
+  project: ProjectWithFiles;
+  activeTab: Tab | null;
+  onFileClick: (projectId: string, filePath: string) => void;
+  onOpenGraph: (projectId: string) => void;
+}
+
+function ExpandedProjectContent({
+  project,
+  activeTab,
+  onFileClick,
+  onOpenGraph,
+}: ExpandedProjectContentProps) {
+  const [query, setQuery] = useState('');
+  const [searchMatches, setSearchMatches] = useState<Set<string> | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setSearchMatches(null);
+      setSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      setSearching(true);
+      searchProjectContent(project.id, trimmed)
+        .then((response) => {
+          if (cancelled) return;
+          setSearchMatches(new Set(response.results.map((result) => result.filePath)));
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSearchMatches(new Set());
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setSearching(false);
+          }
+        });
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [project.id, query]);
+
+  const visibleEntries = useMemo(() => {
+    if (!project.files) return [];
+    if (!searchMatches) return project.files;
+    return filterEntries(project.files, searchMatches);
+  }, [project.files, searchMatches]);
+
+  return (
+    <div className="ml-1 space-y-2">
+      <div className="flex items-center gap-2 px-3 pt-1">
+        <label className="relative flex-1">
+          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search note text..."
+            className="h-8 w-full rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none ring-0 transition-colors focus:border-primary"
+          />
+        </label>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => onOpenGraph(project.id)}
+          aria-label={`Open graph for ${project.name}`}
+          title="Open graph"
+        >
+          <Waypoints className="size-4" />
+        </Button>
+      </div>
+
+      <div>
+        {project.filesLoading ? (
+          <p className="px-4 py-1 text-xs text-muted-foreground">
+            Loading...
+          </p>
+        ) : searching ? (
+          <p className="px-4 py-2 text-xs text-muted-foreground">
+            Searching...
+          </p>
+        ) : project.files && project.files.length > 0 ? (
+          visibleEntries.length > 0 ? (
+            visibleEntries.map((entry) => (
+              <FileTreeNode
+                key={entry.path}
+                entry={entry}
+                projectId={project.id}
+                activeTab={activeTab}
+                depth={1}
+                onFileClick={onFileClick}
+              />
+            ))
+          ) : (
+            <p className="px-4 py-2 text-xs text-muted-foreground">
+              {searchMatches !== null ? 'No markdown files match your search' : 'No markdown files found'}
+            </p>
+          )
+        ) : (
+          <p className="px-4 py-1 text-xs text-muted-foreground">
+            No markdown files found
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Sidebar({
   projects,
   activeTab,
@@ -134,6 +285,8 @@ export function Sidebar({
   collapsed,
   onClose,
   onToggleCollapse,
+  onOpenGraph,
+  onShowShortcuts,
 }: SidebarProps) {
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== 'undefined'
@@ -354,6 +507,15 @@ export function Sidebar({
             >
               <X className="size-4" />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={onShowShortcuts}
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts"
+            >
+              <Keyboard className="size-4" />
+            </Button>
             <ThemeToggle theme={theme} onToggle={onThemeToggle} />
           </div>
         </div>
@@ -371,7 +533,7 @@ export function Sidebar({
         ) : (
           <>
             {selectMode && projects.length > 0 && (
-              <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-1.5">
+              <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-1.5">
                 <button
                   className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
                   onClick={toggleSelectAll}
@@ -384,6 +546,14 @@ export function Sidebar({
                   <span>
                     {selectedCount > 0 ? `${selectedCount} selected` : 'Select all'}
                   </span>
+                </button>
+                <button
+                  className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={exitSelectMode}
+                  aria-label="Exit select mode"
+                  title="Exit select mode"
+                >
+                  <X className="size-3.5" />
                 </button>
               </div>
             )}
@@ -481,26 +651,12 @@ export function Sidebar({
 
                       {!selectMode && isExpanded && (
                         <div className="ml-1">
-                          {project.filesLoading ? (
-                            <p className="px-4 py-1 text-xs text-muted-foreground">
-                              Loading...
-                            </p>
-                          ) : project.files && project.files.length > 0 ? (
-                            project.files.map((entry) => (
-                              <FileTreeNode
-                                key={entry.path}
-                                entry={entry}
-                                projectId={project.id}
-                                activeTab={activeTab}
-                                depth={1}
-                                onFileClick={onFileClick}
-                              />
-                            ))
-                          ) : (
-                            <p className="px-4 py-1 text-xs text-muted-foreground">
-                              No markdown files found
-                            </p>
-                          )}
+                          <ExpandedProjectContent
+                            project={project}
+                            activeTab={activeTab}
+                            onFileClick={onFileClick}
+                            onOpenGraph={onOpenGraph}
+                          />
                         </div>
                       )}
                     </div>
@@ -535,21 +691,11 @@ export function Sidebar({
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      onClick={() => {
-                        if (selectMode) {
-                          exitSelectMode();
-                        } else {
-                          setSelectMode(true);
-                        }
-                      }}
-                      aria-label={selectMode ? 'Exit select mode' : 'Select projects'}
-                      title={selectMode ? 'Exit select mode' : 'Select projects'}
+                      onClick={() => setSelectMode(true)}
+                      aria-label="Select projects"
+                      title="Select projects"
                     >
-                      {selectMode ? (
-                        <X className="size-4" />
-                      ) : (
-                        <ListChecks className="size-4" />
-                      )}
+                      <ListChecks className="size-4" />
                     </Button>
                   )}
                 </div>
