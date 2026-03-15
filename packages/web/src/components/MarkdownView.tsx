@@ -73,8 +73,8 @@ export function MarkdownView({
         ...props
       }: ComponentPropsWithoutRef<'pre'> & { node?: unknown }) => {
         insidePreRef.current = true;
-        const result = <div {...props}>{children}</div>;
-        return result;
+        const { className } = props;
+        return <div className={className}>{children}</div>;
       },
 
       code: ({
