@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npx vite",
-    "build": "npx tsc -b && npx vite build",
-    "preview": "npx vite preview",
+    "dev": "npx -p vite vite",
+    "build": "npx -p typescript tsc -b && npx -p vite vite build",
+    "preview": "npx -p vite vite preview",
     "test": "npx vitest run"
   },
   "dependencies": {

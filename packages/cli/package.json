@@ -8,8 +8,8 @@
     "ezmdv": "dist/index.js"
   },
   "scripts": {
-    "build": "npx tsc",
-    "dev": "npx tsc --watch"
+    "build": "npx -p typescript tsc",
+    "dev": "npx -p typescript tsc --watch"
   },
   "dependencies": {
     "@ezmdv/server": "*",
