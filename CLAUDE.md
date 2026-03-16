@@ -11,8 +11,9 @@ Easy Markdown Viewer — a browser-based markdown viewer/editor launched from th
 ## Commands
 
 ```bash
-npm run build              # Build all workspaces
-npm test                   # Run targeted automated tests across workspaces
+npm start                  # Build all + launch browser (quickest way to use)
+npm run build              # Build all (server first, then cli + web in parallel)
+npm test                   # Run all tests across workspaces
 npm run dev:server         # Build + run server (from root)
 npm run dev:web            # Vite dev server with API proxy to :3000
 
@@ -24,6 +25,8 @@ npm test                   # vitest run (server/web)
 ## After Every Code Change
 
 **Always run `npm run build` from the repo root before testing in the browser.**
+
+Build order matters: the CLI depends on `@ezmdv/server` types, so the root build script compiles server first, then CLI + web in parallel. The `prebuild` script checks that `npm install` has been run.
 
 The CLI (`ezmdv <path>`) serves `packages/web/dist/` — the compiled output. Editing source files has no effect until the web package is rebuilt. Restarting the CLI without rebuilding will still serve the old bundle.
 
@@ -69,8 +72,7 @@ Tests use Vitest (80 tests across 12 files):
 - **Wiki-links**: Obsidian-style `[[Note]]` / `[[Note#Heading]]` links are supported in markdown rendering and the project graph, alongside existing relative `.md` links
 - **Graph/search**: The server scans markdown files per project to build a graph view and content-search results; the web shows a dedicated project graph panel and per-project live sidebar search. Graph panel uses a force-directed layout (140 iterations), supports drag-to-reposition nodes, single-click node selection with neighbor highlighting (dims unrelated nodes/edges), and double-click to open the file. Graph button in the sidebar uses the `Waypoints` icon. Hovering a node for 5s opens a full-screen preview modal (close via X button, backdrop click, or Escape key)
 - **Security**: Path traversal validated via shared `isPathWithinRoot()` in `security.ts`. Upload deletion guarded to `~/.ezmdv/uploads/` only. Express 5 normalizes `../` in URLs before route handlers — path traversal tests accept both 403 and 404
-- **File uploads**: Always use `File[]` (not `FileList`) — `FileList` is a live DOM object that empties when `input.value` is reset. Convert with `Array.from()` before any async work
-- **Folder uploads**: `webkitRelativePath` includes the root folder as a prefix (e.g., `docs/file.md`). The first segment is stripped before sending to the server; the folder name becomes the project name
+- **File uploads**: Single "Upload" button opens a multi-file picker (`accept=".md"`, `multiple`). Always use `File[]` (not `FileList`) — `FileList` is a live DOM object that empties when `input.value` is reset. Convert with `Array.from()` before any async work
 - **Workspace shell**: Desktop sidebar can collapse to an icon rail. Markdown reading supports side-by-side split view, pane swapping, a project graph panel, and app-level fullscreen per pane
 - **Multi-select**: Sidebar supports checkbox selection mode for bulk delete/open of projects
 - **Autoscroll**: `useAutoScroll` hook with discrete-step `requestAnimationFrame` loop — two-phase model (wait interval → animate 300ms with ease-out cubic). First step fires immediately on activation. Configurable `intervalSeconds` (1–30) and `scrollPercent` (1–100%). `AutoScrollControls` component: play/pause button + settings popover with range sliders. Auto-stops at bottom, on edit/split/graph mode, and on tab switch. Pauses 2s on user wheel/touch, then resumes. View-mode only, single pane only
