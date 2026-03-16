@@ -126,6 +126,29 @@ export async function searchProjectContent(
   );
 }
 
+export interface GlobalSearchResult {
+  projectId: string;
+  projectName: string;
+  filePath: string;
+  fileName: string;
+  preview: string;
+  matchCount: number;
+}
+
+export interface GlobalSearchResponse {
+  query: string;
+  results: GlobalSearchResult[];
+}
+
+export async function searchAllProjects(
+  query: string,
+): Promise<GlobalSearchResponse> {
+  const params = new URLSearchParams({ q: query });
+  return request<GlobalSearchResponse>(
+    `/api/projects/search?${params.toString()}`,
+  );
+}
+
 export async function createProject(data: {
   name: string;
   path: string;

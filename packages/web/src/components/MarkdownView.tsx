@@ -5,10 +5,15 @@ import rehypeHighlight from 'rehype-highlight';
 import { CodeBlock } from './CodeBlock';
 import { CollapsibleSection } from './CollapsibleSection';
 import { FootnoteCard } from './FootnoteCard';
+import {
+  transformWikiLinksToMarkdown,
+  WIKI_LINK_PREFIX,
+  type InternalLinkKind,
+} from '@/lib/markdownLinks';
 
 interface MarkdownViewProps {
   content: string;
-  onLinkClick: (filePath: string) => void;
+  onLinkClick: (target: string, kind: InternalLinkKind) => void;
   onCheckboxChange?: (index: number, checked: boolean) => void;
 }
 
@@ -19,6 +24,10 @@ export function MarkdownView({
 }: MarkdownViewProps) {
   const remarkPlugins = useMemo(() => [remarkGfm], []);
   const rehypePlugins = useMemo(() => [rehypeHighlight], []);
+  const renderedContent = useMemo(
+    () => transformWikiLinksToMarkdown(content),
+    [content],
+  );
 
   // Use a ref to track checkbox index across the render cycle.
   // Reset on each render.
@@ -132,13 +141,34 @@ export function MarkdownView({
           }
         }
 
+        if (href?.startsWith(WIKI_LINK_PREFIX)) {
+          const [targetPath, heading] = href.slice(WIKI_LINK_PREFIX.length).split('#');
+          const decodedTarget = decodeURIComponent(targetPath).replace(/\.md$/i, '');
+          const target = heading
+            ? `${decodedTarget}#${decodeURIComponent(heading)}`
+            : decodedTarget;
+          return (
+            <a
+              href={href}
+              onClick={(e) => {
+                e.preventDefault();
+                onLinkClick(target, 'wiki');
+              }}
+              className="text-primary underline underline-offset-2 hover:text-primary/80 cursor-pointer"
+              {...props}
+            >
+              {children}
+            </a>
+          );
+        }
+
         if (href && isMarkdownLink(href)) {
           return (
             <a
               href={href}
               onClick={(e) => {
                 e.preventDefault();
-                onLinkClick(href);
+                onLinkClick(href, 'markdown');
               }}
               className="text-primary underline underline-offset-2 hover:text-primary/80 cursor-pointer"
               {...props}
@@ -225,7 +255,7 @@ export function MarkdownView({
         rehypePlugins={rehypePlugins}
         components={components}
       >
-        {content}
+        {renderedContent}
       </ReactMarkdown>
     </div>
   );
@@ -238,8 +268,10 @@ function createHeadingComponent(level: number) {
     node: _node,
     ...props
   }: ComponentPropsWithoutRef<'h1'> & { node?: unknown }) {
+    const headingId = id || slugify(extractText(children));
+
     return (
-      <CollapsibleSection level={level} id={id} {...props}>
+      <CollapsibleSection level={level} id={headingId} {...props}>
         {children}
       </CollapsibleSection>
     );
@@ -265,4 +297,12 @@ function extractText(node: ReactNode): string {
     );
   }
   return '';
+}
+
+function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-');
 }

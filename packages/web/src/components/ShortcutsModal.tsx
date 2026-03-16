@@ -12,6 +12,7 @@ const SHORTCUTS = [
   { key: 'Ctrl/⌘ + W', description: 'Close focused tab' },
   { key: 'Ctrl/⌘ + ]', description: 'Next tab' },
   { key: 'Ctrl/⌘ + [', description: 'Previous tab' },
+  { key: 'Ctrl/⌘ + Shift + A', description: 'Toggle autoscroll' },
   { key: 'Esc', description: 'Exit fullscreen' },
   { key: 'Double-click graph node', description: 'Open file' },
   { key: 'Drag graph node', description: 'Reposition' },

@@ -401,6 +401,20 @@ export function useTabs() {
     });
   }, []);
 
+  const swapPanes = useCallback(() => {
+    setLayout((prevLayout) => {
+      if (!prevLayout.splitView || !prevLayout.primaryTab || !prevLayout.secondaryTab) {
+        return prevLayout;
+      }
+
+      return {
+        ...prevLayout,
+        primaryTab: prevLayout.secondaryTab,
+        secondaryTab: prevLayout.primaryTab,
+      };
+    });
+  }, []);
+
   const activeTab =
     layout.splitView && layout.focusedPane === 'secondary'
       ? layout.secondaryTab ?? layout.primaryTab
@@ -424,5 +438,6 @@ export function useTabs() {
     enterSplitView,
     exitSplitView,
     setFullscreenPane,
+    swapPanes,
   };
 }

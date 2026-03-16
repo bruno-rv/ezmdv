@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import {
   ArrowRightLeft,
   Columns2,
@@ -9,13 +9,16 @@ import {
   Minimize2,
   Pencil,
   Save,
+  X,
 } from 'lucide-react';
+import { AutoScrollControls } from '@/components/AutoScrollControls';
 import { Button } from '@/components/ui/button';
 import { Sidebar } from '@/components/Sidebar';
 import { TabBar } from '@/components/TabBar';
 import { MarkdownView } from '@/components/MarkdownView';
 import { FileMetaTooltip } from '@/components/FileMetaTooltip';
 import { GraphPanel } from '@/components/GraphPanel';
+import { GraphPreviewModal } from '@/components/GraphPreviewModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +29,9 @@ import { useTheme } from '@/hooks/useTheme';
 import { useProjects } from '@/hooks/useProjects';
 import { useTabs, type Pane } from '@/hooks/useTabs';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import { useEditMode } from '@/hooks/useEditMode';
+import { useAutoScroll } from '@/hooks/useAutoScroll';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
   fetchFileContent,
   fetchFileMetadata,
@@ -103,37 +109,61 @@ function App() {
   const [graphData, setGraphData] = useState<ProjectGraph | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
   const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null);
-
-  const [editMode, setEditMode] = useState(false);
-  const [editContent, setEditContent] = useState('');
-  const [saving, setSaving] = useState(false);
-  const editModeRef = useRef(false);
   const [editorFilePaths, setEditorFilePaths] = useState<string[]>([]);
+  const [graphPreview, setGraphPreview] = useState<{ filePath: string; content: string } | null>(null);
 
   const metaCacheRef = useRef<Map<string, FileMetadata>>(new Map());
-  const metaHoveredRef = useRef(false);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
   const [metaTooltip, setMetaTooltip] = useState<{ filePath: string; data: FileMetadata } | null>(null);
 
-  const primaryContent = paneStates.primary.content;
-  const isDirty = !splitView && editMode && editContent !== primaryContent;
+  useEffect(() => {
+    if (!metaTooltip) return;
+    const close = () => setMetaTooltip(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [metaTooltip]);
 
-  const setPaneLoading = useCallback((pane: Pane, loading: boolean) => {
-    setPaneStates((prev) => ({
-      ...prev,
-      [pane]: {
-        ...prev[pane],
-        loading,
-      },
-    }));
-  }, []);
+  const primaryContent = paneStates.primary.content;
 
   const setPaneContent = useCallback((pane: Pane, content: string | null) => {
     setPaneStates((prev) => ({
       ...prev,
-      [pane]: {
-        ...prev[pane],
-        content,
-      },
+      [pane]: { ...prev[pane], content },
+    }));
+  }, []);
+
+  const {
+    editMode,
+    editContent,
+    saving,
+    isDirty,
+    editModeRef,
+    setEditMode,
+    setEditContent,
+    handleEnterEdit,
+    handleExitEdit,
+    handleSave,
+  } = useEditMode({
+    primaryTab,
+    primaryContent,
+    splitView,
+    setPaneContent,
+  });
+
+  const autoScroll = useAutoScroll({
+    containerRef: contentScrollRef,
+    enabled: !editMode && !graphProjectId && !splitView,
+  });
+
+  const setPaneLoading = useCallback((pane: Pane, loading: boolean) => {
+    setPaneStates((prev) => ({
+      ...prev,
+      [pane]: { ...prev[pane], loading },
     }));
   }, []);
 
@@ -152,24 +182,16 @@ function App() {
 
       fetchFileContent(tab.projectId, tab.filePath)
         .then((content) => {
-          if (!cancelled) {
-            setPaneContent(pane, content);
-          }
+          if (!cancelled) setPaneContent(pane, content);
         })
         .catch(() => {
-          if (!cancelled) {
-            setPaneContent(pane, 'Error loading file content.');
-          }
+          if (!cancelled) setPaneContent(pane, 'Error loading file content.');
         })
         .finally(() => {
-          if (!cancelled) {
-            setPaneLoading(pane, false);
-          }
+          if (!cancelled) setPaneLoading(pane, false);
         });
 
-      return () => {
-        cancelled = true;
-      };
+      return () => { cancelled = true; };
     },
     [setPaneContent, setPaneLoading],
   );
@@ -182,10 +204,7 @@ function App() {
   const getProjectFilePaths = useCallback(
     async (projectId: string): Promise<string[]> => {
       const existing = projects.find((project) => project.id === projectId)?.files;
-      if (existing) {
-        return flattenFileTree(existing);
-      }
-
+      if (existing) return flattenFileTree(existing);
       const fetched = await fetchProjectFiles(projectId);
       return flattenFileTree(fetched);
     },
@@ -196,20 +215,11 @@ function App() {
     (
       projectId: string,
       filePath: string,
-      options?: {
-        closeGraph?: boolean;
-        anchor?: string | null;
-      },
+      options?: { closeGraph?: boolean; anchor?: string | null },
     ) => {
-      if (options?.closeGraph ?? true) {
-        setGraphProjectId(null);
-      }
+      if (options?.closeGraph ?? true) setGraphProjectId(null);
       if (options?.anchor) {
-        setPendingAnchor({
-          projectId,
-          filePath,
-          anchor: options.anchor,
-        });
+        setPendingAnchor({ projectId, filePath, anchor: options.anchor });
       }
       openTab(projectId, filePath);
       setSidebarOpen(false);
@@ -218,35 +228,12 @@ function App() {
   );
 
   useEffect(() => {
-    editModeRef.current = editMode;
-  }, [editMode]);
-
-  useEffect(() => {
-    if (splitView && editMode) {
-      setEditMode(false);
-    }
-  }, [editMode, splitView]);
-
-  const prevPrimaryTabRef = useRef<Tab | null>(null);
-  useEffect(() => {
-    if (
-      prevPrimaryTabRef.current &&
-      primaryTab &&
-      (prevPrimaryTabRef.current.projectId !== primaryTab.projectId ||
-        prevPrimaryTabRef.current.filePath !== primaryTab.filePath)
-    ) {
-      setEditMode(false);
-    }
-    prevPrimaryTabRef.current = primaryTab;
-  }, [primaryTab]);
-
-  useEffect(() => {
     if (!editMode || !primaryTab) return;
     let cancelled = false;
     getProjectFilePaths(primaryTab.projectId).then((paths) => {
       if (!cancelled) {
         setEditorFilePaths(prev =>
-          prev.join('\0') === paths.join('\0') ? prev : paths
+          prev.length === paths.length && prev.every((p, i) => p === paths[i]) ? prev : paths
         );
       }
     }).catch(() => { if (!cancelled) setEditorFilePaths([]); });
@@ -338,6 +325,7 @@ function App() {
       }
     },
     [
+      editModeRef,
       graphProjectId,
       loadProjectFiles,
       primaryTab,
@@ -349,143 +337,29 @@ function App() {
 
   useWebSocket({ onFileChanged: handleFileChanged });
 
-  const handleEnterEdit = useCallback(() => {
-    if (splitView || primaryContent === null) return;
-    setEditContent(primaryContent);
-    setEditMode(true);
-  }, [primaryContent, splitView]);
+  const setGraphPreviewNull = useCallback(() => setGraphPreview(null), []);
 
-  const handleExitEdit = useCallback(() => {
-    if (isDirty) {
-      if (!window.confirm('You have unsaved changes. Discard them?')) {
-        return;
-      }
-    }
-    setEditMode(false);
-  }, [isDirty]);
-
-  const handleSave = useCallback(async () => {
-    if (!primaryTab || saving) return;
-    setSaving(true);
-    try {
-      await saveFileContent(primaryTab.projectId, primaryTab.filePath, editContent);
-      setPaneContent('primary', editContent);
-    } catch (error) {
-      console.error('Save failed:', error);
-    } finally {
-      setSaving(false);
-    }
-  }, [editContent, primaryTab, saving, setPaneContent]);
-
-  const handleSaveAndExit = useCallback(async () => {
-    if (!primaryTab || saving) return;
-    setSaving(true);
-    try {
-      await saveFileContent(primaryTab.projectId, primaryTab.filePath, editContent);
-      setPaneContent('primary', editContent);
-      setEditMode(false);
-    } catch (error) {
-      console.error('Save failed:', error);
-    } finally {
-      setSaving(false);
-    }
-  }, [editContent, primaryTab, saving, setPaneContent]);
-
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (showShortcuts) return;
-
-      const isMac = navigator.platform.toUpperCase().includes('MAC');
-      const mod = isMac ? e.metaKey : e.ctrlKey;
-
-      if (e.key === 'Escape' && fullscreenPane) {
-        e.preventDefault();
-        setFullscreenPane(null);
-        return;
-      }
-
-      if (mod && e.key === 's') {
-        e.preventDefault();
-        if (editMode && primaryTab) {
-          handleSave();
-        }
-        return;
-      }
-
-      if (mod && e.key === 'e') {
-        e.preventDefault();
-        if (splitView) {
-          return;
-        }
-        if (editMode) {
-          handleExitEdit();
-        } else if (primaryTab && primaryContent !== null) {
-          handleEnterEdit();
-        }
-        return;
-      }
-
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable ||
-        target.closest('.cm-editor')
-      ) {
-        return;
-      }
-
-      if (mod && e.key === 'w') {
-        e.preventDefault();
-        if (activeTab) {
-          if (
-            editMode &&
-            isDirty &&
-            primaryTab &&
-            activeTab.projectId === primaryTab.projectId &&
-            activeTab.filePath === primaryTab.filePath
-          ) {
-            if (!window.confirm('You have unsaved changes. Close anyway?')) {
-              return;
-            }
-          }
-          setEditMode(false);
-          closeTab(activeTab.projectId, activeTab.filePath);
-        }
-        return;
-      }
-
-      if (mod && e.key === ']') {
-        e.preventDefault();
-        switchToNextTab();
-        return;
-      }
-
-      if (mod && e.key === '[') {
-        e.preventDefault();
-        switchToPrevTab();
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [
+  useKeyboardShortcuts({
     activeTab,
-    closeTab,
+    primaryTab,
+    primaryContent,
     editMode,
+    isDirty,
+    splitView,
     fullscreenPane,
+    showShortcuts,
+    graphPreview,
+    handleSave,
     handleEnterEdit,
     handleExitEdit,
-    handleSave,
-    isDirty,
-    primaryContent,
-    primaryTab,
-    setFullscreenPane,
-    showShortcuts,
-    splitView,
+    setEditMode,
+    closeTab,
     switchToNextTab,
     switchToPrevTab,
-  ]);
+    setFullscreenPane,
+    setGraphPreview: setGraphPreviewNull,
+    autoScrollToggle: autoScroll.toggle,
+  });
 
   const handleFileClick = useCallback(
     (projectId: string, filePath: string) => {
@@ -504,22 +378,16 @@ function App() {
       if (kind === 'markdown') {
         const [filePath, anchor] = target.split('#');
         const resolvedPath = resolveMarkdownPath(tab.filePath, filePath);
-        openProjectFile(tab.projectId, resolvedPath, {
-          anchor: anchor || null,
-        });
+        openProjectFile(tab.projectId, resolvedPath, { anchor: anchor || null });
         return;
       }
 
       const [wikiTarget, anchor] = target.split('#');
       const filePaths = await getProjectFilePaths(tab.projectId);
       const resolvedPath = resolveWikiLinkTarget(wikiTarget, filePaths);
-      if (!resolvedPath) {
-        return;
-      }
+      if (!resolvedPath) return;
 
-      openProjectFile(tab.projectId, resolvedPath, {
-        anchor: anchor || null,
-      });
+      openProjectFile(tab.projectId, resolvedPath, { anchor: anchor || null });
     },
     [focusPane, getPaneTab, getProjectFilePaths, openProjectFile],
   );
@@ -584,18 +452,6 @@ function App() {
 
   const handleBulkOpen = useCallback(
     async (projectIds: string[]) => {
-      function collectFiles(entries: FileTreeEntry[]): string[] {
-        const paths: string[] = [];
-        for (const entry of entries) {
-          if (entry.type === 'file') {
-            paths.push(entry.path);
-          } else if (entry.children) {
-            paths.push(...collectFiles(entry.children));
-          }
-        }
-        return paths;
-      }
-
       try {
         const treesById = await Promise.all(
           projectIds.map(async (id) => ({
@@ -605,7 +461,7 @@ function App() {
         );
 
         for (const { id, files } of treesById) {
-          for (const filePath of collectFiles(files)) {
+          for (const filePath of flattenFileTree(files)) {
             openProjectFile(id, filePath, { closeGraph: false });
           }
         }
@@ -668,9 +524,10 @@ function App() {
         }
         setEditMode(false);
       }
+      autoScroll.stop();
       closeTab(projectId, filePath);
     },
-    [closeTab, editMode, isDirty, primaryTab],
+    [autoScroll, closeTab, editMode, isDirty, primaryTab, setEditMode],
   );
 
   const handleSplitView = useCallback(() => {
@@ -681,7 +538,7 @@ function App() {
       setEditMode(false);
     }
     enterSplitView();
-  }, [editMode, enterSplitView, isDirty]);
+  }, [editMode, enterSplitView, isDirty, setEditMode]);
 
   const handleOpenGraph = useCallback(async (projectId: string) => {
     setGraphProjectId(projectId);
@@ -698,20 +555,22 @@ function App() {
   }, []);
 
   const handleGraphNodeOpen = useCallback(
-    (filePath: string) => {
+    async (filePath: string) => {
       if (!graphProjectId) return;
-      openProjectFile(graphProjectId, filePath);
+      try {
+        const content = await fetchFileContent(graphProjectId, filePath);
+        setGraphPreview({ filePath, content });
+      } catch {
+        // ignore
+      }
     },
-    [graphProjectId, openProjectFile],
+    [graphProjectId],
   );
 
   const renderMarkdownPane = useCallback(
     (
       pane: Pane,
-      options: {
-        allowEdit: boolean;
-        splitContext: boolean;
-      },
+      options: { allowEdit: boolean; splitContext: boolean },
     ) => {
       const tab = pane === 'primary' ? primaryTab : secondaryTab;
       const paneState = paneStates[pane];
@@ -767,14 +626,18 @@ function App() {
 
             <div
               className="relative"
-              onMouseEnter={() => { metaHoveredRef.current = true; }}
-              onMouseLeave={() => { metaHoveredRef.current = false; setMetaTooltip(null); }}
+              onMouseDown={(e) => e.stopPropagation()}
             >
               <Button
                 variant="ghost"
                 size="icon-sm"
-                onMouseEnter={async (e) => {
+                aria-label="File info"
+                onClick={async (e) => {
                   e.stopPropagation();
+                  if (metaTooltip?.filePath === tab.filePath) {
+                    setMetaTooltip(null);
+                    return;
+                  }
                   const cacheKey = `${tab.projectId}:${tab.filePath}`;
                   const cached = metaCacheRef.current.get(cacheKey);
                   if (cached) {
@@ -784,22 +647,16 @@ function App() {
                   try {
                     const data = await fetchFileMetadata(tab.projectId, tab.filePath);
                     metaCacheRef.current.set(cacheKey, data);
-                    if (metaHoveredRef.current) {
-                      setMetaTooltip({ filePath: tab.filePath, data });
-                    }
+                    setMetaTooltip({ filePath: tab.filePath, data });
                   } catch {
                     // ignore
                   }
                 }}
-                aria-label="File info"
-                title="File info"
               >
                 <Info className="size-4" />
               </Button>
               {metaTooltip && metaTooltip.filePath === tab.filePath && (
-                <FileMetaTooltip
-                  data={metaTooltip.data}
-                />
+                <FileMetaTooltip data={metaTooltip.data} />
               )}
             </div>
 
@@ -816,6 +673,17 @@ function App() {
               >
                 <Columns2 className="size-4" />
               </Button>
+            )}
+
+            {!editMode && !previewOnly && pane === 'primary' && (
+              <AutoScrollControls
+                active={autoScroll.active}
+                intervalSeconds={autoScroll.intervalSeconds}
+                scrollPercent={autoScroll.scrollPercent}
+                onToggle={autoScroll.toggle}
+                onIntervalChange={autoScroll.setIntervalSeconds}
+                onPercentChange={autoScroll.setScrollPercent}
+              />
             )}
 
             {(!editMode || previewOnly) && (
@@ -845,7 +713,7 @@ function App() {
                     size="icon-sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleSaveAndExit();
+                      handleSave(true);
                     }}
                     disabled={saving}
                     aria-label="Save and preview"
@@ -922,7 +790,10 @@ function App() {
               </div>
             </Suspense>
           ) : paneState.content !== null ? (
-            <div className="flex-1 overflow-auto p-6">
+            <div
+              className="flex-1 overflow-auto p-6"
+              ref={pane === 'primary' ? contentScrollRef : undefined}
+            >
               <MarkdownView
                 content={paneState.content}
                 onLinkClick={(target, kind) => handleLinkClick(pane, target, kind)}
@@ -940,6 +811,7 @@ function App() {
       );
     },
     [
+      autoScroll,
       editContent,
       editMode,
       editorFilePaths,
@@ -951,13 +823,14 @@ function App() {
       handleEnterEdit,
       handleLinkClick,
       handleSave,
-      handleSaveAndExit,
       handleSplitView,
       isDirty,
+      metaTooltip,
       paneStates,
       primaryTab,
       saving,
       secondaryTab,
+      setEditContent,
       setFullscreenPane,
       splitView,
       theme,
@@ -970,10 +843,14 @@ function App() {
   const graphProject = graphProjectId
     ? projects.find((project) => project.id === graphProjectId) ?? null
     : null;
-  const openFilePaths = new Set(
-    [primaryTab?.filePath, secondaryTab?.filePath].filter(
-      (filePath): filePath is string => Boolean(filePath),
-    ),
+  const openFilePaths = useMemo(
+    () =>
+      new Set(
+        [primaryTab?.filePath, secondaryTab?.filePath].filter(
+          (filePath): filePath is string => Boolean(filePath),
+        ),
+      ),
+    [primaryTab?.filePath, secondaryTab?.filePath],
   );
 
   return (
@@ -1088,6 +965,13 @@ function App() {
         )}
       </main>
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {graphPreview && (
+        <GraphPreviewModal
+          filePath={graphPreview.filePath}
+          content={graphPreview.content}
+          onClose={setGraphPreviewNull}
+        />
+      )}
     </div>
   );
 }
