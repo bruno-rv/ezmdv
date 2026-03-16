@@ -5,9 +5,9 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "test": "vitest run"
+    "build": "npx tsc",
+    "dev": "npx tsc --watch",
+    "test": "npx vitest run"
   },
   "dependencies": {
     "chokidar": "^4.0.0",
