@@ -1,8 +1,6 @@
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { ExpandedProjectContent } from './ExpandedProjectContent';
-
-afterEach(cleanup);
 import type { ProjectWithFiles } from '@/hooks/useProjects';
 
 vi.mock('@/lib/api', () => ({
@@ -99,7 +97,7 @@ describe('ExpandedProjectContent', () => {
     expect(screen.getByLabelText('Create new folder')).toBeInTheDocument();
   });
 
-  it('does not render action icons when globalFilter is set', () => {
+  it('hides search and action toolbar when globalFilter is set', () => {
     render(
       <ExpandedProjectContent
         project={project}
