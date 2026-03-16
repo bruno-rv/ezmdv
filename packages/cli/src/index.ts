@@ -64,6 +64,8 @@ program
             : p,
         );
         updateState({ projects: updatedProjects });
+      } else if (state.dismissedCliPaths?.includes(target.path)) {
+        // User previously dismissed this project — don't re-add
       } else {
         // Add new project
         const newProject: Project = {

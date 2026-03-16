@@ -5,6 +5,13 @@ import path from 'node:path';
 import os from 'node:os';
 import multer from 'multer';
 import { readState, updateState, type Project } from '../state.js';
+import {
+  buildProjectGraphFromFiles,
+  collectMarkdownFiles,
+  searchProjectFiles,
+} from '../markdown.js';
+import { IGNORED_DIRS } from '../constants.js';
+import { isPathWithinRoot, projectLookup, type ProjectRequest } from '../security.js';
 
 interface FileTreeEntry {
   name: string;
@@ -12,19 +19,6 @@ interface FileTreeEntry {
   type: 'file' | 'directory';
   children?: FileTreeEntry[];
 }
-
-const IGNORED_DIRS = new Set([
-  'node_modules',
-  '.git',
-  '.ezmdv',
-  'dist',
-  '.next',
-  '.nuxt',
-  '.svelte-kit',
-  '__pycache__',
-  '.venv',
-  'vendor',
-]);
 
 function listMarkdownFiles(
   dirPath: string,
@@ -66,7 +60,6 @@ function listMarkdownFiles(
     }
   }
 
-  // Sort: directories first, then files, alphabetically within each group
   entries.sort((a, b) => {
     if (a.type !== b.type) {
       return a.type === 'directory' ? -1 : 1;
@@ -77,13 +70,18 @@ function listMarkdownFiles(
   return entries;
 }
 
+function resolveWildcardPath(req: Request): string | null {
+  const raw = (req.params as Record<string, string | string[]>).filePath;
+  const filePath = Array.isArray(raw) ? raw.join('/') : raw;
+  return filePath || null;
+}
+
 export function createProjectRoutes(statePath?: string): Router {
   const router = Router();
+  const withProject = projectLookup(statePath);
 
-  // Multer storage for uploads
   const storage = multer.diskStorage({
     destination(_req, _file, cb) {
-      // Will be set per-request in the route handler
       cb(null, os.tmpdir());
     },
     filename(_req, file, cb) {
@@ -112,7 +110,6 @@ export function createProjectRoutes(statePath?: string): Router {
       return;
     }
 
-    // For upload projects, auto-generate the path under ~/.ezmdv/uploads/<name>/
     let resolvedPath: string;
     if (source === 'upload') {
       const safeName = name.replace(/[^a-zA-Z0-9_\-. ]/g, '_');
@@ -141,21 +138,17 @@ export function createProjectRoutes(statePath?: string): Router {
     res.status(201).json(project);
   });
 
-  // PATCH /api/projects/:id — update project metadata (e.g. rename)
-  router.patch('/:id', (req: Request, res: Response) => {
-    const state = readState(statePath);
-    const project = state.projects.find((p) => p.id === req.params.id);
-
-    if (!project) {
-      res.status(404).json({ error: 'Project not found' });
-      return;
-    }
-
+  // PATCH /api/projects/:id — update project metadata
+  router.patch('/:id', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
     const { name } = req.body as { name?: string };
     if (name && typeof name === 'string') {
       project.name = name.trim();
     }
 
+    const state = readState(statePath);
+    const idx = state.projects.findIndex((p) => p.id === project.id);
+    if (idx !== -1) state.projects[idx] = project;
     updateState({ projects: state.projects }, statePath);
     res.json(project);
   });
@@ -172,16 +165,13 @@ export function createProjectRoutes(statePath?: string): Router {
 
     const project = state.projects[projectIdx];
 
-    // For upload projects, move files to trash instead of deleting
     if (project.source === 'upload') {
       const uploadsRoot = path.resolve(path.join(os.homedir(), '.ezmdv', 'uploads'));
-      const resolvedProjectPath = path.resolve(project.path);
-      if (resolvedProjectPath.startsWith(uploadsRoot + path.sep)) {
+      if (isPathWithinRoot(project.path, uploadsRoot)) {
         try {
           const trashDir = path.join(os.homedir(), '.ezmdv', 'trash', project.id);
           fs.mkdirSync(trashDir, { recursive: true });
           fs.renameSync(project.path, path.join(trashDir, 'files'));
-          // Write metadata so we know what this was
           fs.writeFileSync(
             path.join(trashDir, 'meta.json'),
             JSON.stringify({
@@ -192,7 +182,6 @@ export function createProjectRoutes(statePath?: string): Router {
             'utf-8',
           );
         } catch {
-          // Fallback: if move fails (cross-device), delete directly
           try {
             fs.rmSync(project.path, { recursive: true, force: true });
           } catch {
@@ -202,15 +191,19 @@ export function createProjectRoutes(statePath?: string): Router {
       }
     }
 
-    // Remove project from state
     state.projects.splice(projectIdx, 1);
 
-    // Close any open tabs belonging to this project
+    if (project.source === 'cli') {
+      state.dismissedCliPaths = state.dismissedCliPaths ?? [];
+      if (!state.dismissedCliPaths.includes(project.path)) {
+        state.dismissedCliPaths.push(project.path);
+      }
+    }
+
     state.openTabs = state.openTabs.filter(
       (t) => t.projectId !== project.id,
     );
 
-    // Clean up checkbox states for this project
     for (const key of Object.keys(state.checkboxStates)) {
       if (key.startsWith(`${project.id}:`)) {
         delete state.checkboxStates[key];
@@ -222,6 +215,7 @@ export function createProjectRoutes(statePath?: string): Router {
         projects: state.projects,
         openTabs: state.openTabs,
         checkboxStates: state.checkboxStates,
+        dismissedCliPaths: state.dismissedCliPaths,
       },
       statePath,
     );
@@ -229,47 +223,121 @@ export function createProjectRoutes(statePath?: string): Router {
     res.json({ deleted: true });
   });
 
-  // GET /api/projects/:id/files — list .md files in project directory
-  router.get('/:id/files', (req: Request, res: Response) => {
-    const state = readState(statePath);
-    const project = state.projects.find((p) => p.id === req.params.id);
+  // GET /api/projects/:id/file-meta
+  router.get('/:id/file-meta', withProject, async (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
 
-    if (!project) {
-      res.status(404).json({ error: 'Project not found' });
+    const filePath = typeof req.query.path === 'string' ? req.query.path : '';
+    if (!filePath) {
+      res.status(400).json({ error: 'path query parameter is required' });
       return;
     }
 
+    const fullPath = path.join(project.path, filePath);
+    if (!isPathWithinRoot(fullPath, project.path)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    try {
+      const stat = await fs.promises.stat(fullPath);
+      const fileContent = await fs.promises.readFile(fullPath, 'utf-8');
+      const lineCount = fileContent.split('\n').length;
+
+      res.json({
+        fileName: path.basename(fullPath),
+        sizeBytes: stat.size,
+        lineCount,
+        createdAt: stat.birthtime.toISOString(),
+        modifiedAt: stat.mtime.toISOString(),
+        owner: os.userInfo().username,
+      });
+    } catch {
+      res.status(404).json({ error: 'File not found' });
+    }
+  });
+
+  // GET /api/projects/search — global search across all projects
+  router.get('/search', (req: Request, res: Response) => {
+    const query = typeof req.query.q === 'string' ? req.query.q : '';
+    if (!query.trim()) {
+      res.json({ query, results: [] });
+      return;
+    }
+
+    const state = readState(statePath);
+    const allResults: Array<{
+      projectId: string;
+      projectName: string;
+      filePath: string;
+      fileName: string;
+      preview: string;
+      matchCount: number;
+    }> = [];
+
+    for (const project of state.projects) {
+      const files = collectMarkdownFiles(project.path);
+      const projectResults = searchProjectFiles(files, query);
+      for (const result of projectResults) {
+        allResults.push({
+          projectId: project.id,
+          projectName: project.name,
+          ...result,
+        });
+      }
+    }
+
+    allResults.sort((a, b) => {
+      if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+      return a.filePath.localeCompare(b.filePath);
+    });
+
+    res.json({ query, results: allResults });
+  });
+
+  // GET /api/projects/:id/files — list .md files
+  router.get('/:id/files', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
     const tree = listMarkdownFiles(project.path, project.path);
     res.json(tree);
   });
 
-  // GET /api/projects/:id/files/* — read a specific markdown file
-  // Express 5 requires named wildcard parameters
-  router.get('/:id/files/*filePath', (req: Request, res: Response) => {
-    const state = readState(statePath);
-    const project = state.projects.find((p) => p.id === req.params.id);
+  // GET /api/projects/:id/graph
+  router.get('/:id/graph', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
+    const files = collectMarkdownFiles(project.path);
+    res.json(buildProjectGraphFromFiles(files));
+  });
 
-    if (!project) {
-      res.status(404).json({ error: 'Project not found' });
+  // GET /api/projects/:id/search
+  router.get('/:id/search', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
+
+    const query = typeof req.query.q === 'string' ? req.query.q : '';
+    if (!query.trim()) {
+      res.json({ query, results: [] });
       return;
     }
 
-    // In Express 5, wildcard params can be an array of path segments
-    const rawFilePath = (req.params as Record<string, string | string[]>).filePath;
-    const filePath = Array.isArray(rawFilePath)
-      ? rawFilePath.join('/')
-      : rawFilePath;
+    const files = collectMarkdownFiles(project.path);
+    res.json({
+      query,
+      results: searchProjectFiles(files, query),
+    });
+  });
+
+  // GET /api/projects/:id/files/* — read a file
+  router.get('/:id/files/*filePath', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
+
+    const filePath = resolveWildcardPath(req);
     if (!filePath) {
       res.status(400).json({ error: 'File path is required' });
       return;
     }
 
     const fullPath = path.join(project.path, filePath);
-
-    // Security: ensure the resolved path is within the project directory
-    const resolved = path.resolve(fullPath);
-    const projectRoot = path.resolve(project.path);
-    if (!resolved.startsWith(projectRoot)) {
+    if (!isPathWithinRoot(fullPath, project.path)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
@@ -282,31 +350,18 @@ export function createProjectRoutes(statePath?: string): Router {
     }
   });
 
-  // PUT /api/projects/:id/files/* — update a specific markdown file
-  router.put('/:id/files/*filePath', (req: Request, res: Response) => {
-    const state = readState(statePath);
-    const project = state.projects.find((p) => p.id === req.params.id);
+  // PUT /api/projects/:id/files/* — write a file
+  router.put('/:id/files/*filePath', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
 
-    if (!project) {
-      res.status(404).json({ error: 'Project not found' });
-      return;
-    }
-
-    const rawFilePath = (req.params as Record<string, string | string[]>).filePath;
-    const filePath = Array.isArray(rawFilePath)
-      ? rawFilePath.join('/')
-      : rawFilePath;
+    const filePath = resolveWildcardPath(req);
     if (!filePath) {
       res.status(400).json({ error: 'File path is required' });
       return;
     }
 
     const fullPath = path.join(project.path, filePath);
-
-    // Security: ensure the resolved path is within the project directory
-    const resolved = path.resolve(fullPath);
-    const projectRoot = path.resolve(project.path);
-    if (!resolved.startsWith(projectRoot)) {
+    if (!isPathWithinRoot(fullPath, project.path)) {
       res.status(403).json({ error: 'Access denied' });
       return;
     }
@@ -325,18 +380,13 @@ export function createProjectRoutes(statePath?: string): Router {
     }
   });
 
-  // POST /api/projects/:id/upload — upload files
+  // POST /api/projects/:id/upload
   router.post(
     '/:id/upload',
+    withProject,
     upload.array('files'),
     (req: Request, res: Response) => {
-      const state = readState(statePath);
-      const project = state.projects.find((p) => p.id === req.params.id);
-
-      if (!project) {
-        res.status(404).json({ error: 'Project not found' });
-        return;
-      }
+      const { project } = req as ProjectRequest;
 
       const files = req.files as Express.Multer.File[];
       if (!files || files.length === 0) {
@@ -344,7 +394,6 @@ export function createProjectRoutes(statePath?: string): Router {
         return;
       }
 
-      // relativePaths is sent as a JSON array or comma-separated string
       const relativePathsRaw = req.body.relativePaths as
         | string
         | string[]
@@ -362,26 +411,19 @@ export function createProjectRoutes(statePath?: string): Router {
 
       const uploadDir = project.path;
       const savedFiles: string[] = [];
-      const resolvedUploadDir = path.resolve(uploadDir);
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const relativePath =
           relativePaths[i] || file.originalname;
         const destPath = path.join(uploadDir, relativePath);
-        const resolvedDest = path.resolve(destPath);
 
-        // Security: prevent path traversal
-        if (!resolvedDest.startsWith(resolvedUploadDir)) {
-          // Clean up the temp file and skip — path traversal attempt
+        if (!isPathWithinRoot(destPath, uploadDir)) {
           fs.unlinkSync(file.path);
           continue;
         }
 
-        // Ensure parent directory exists
         fs.mkdirSync(path.dirname(destPath), { recursive: true });
-
-        // Move from temp to destination
         fs.renameSync(file.path, destPath);
         savedFiles.push(relativePath);
       }

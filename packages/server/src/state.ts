@@ -20,6 +20,7 @@ export interface AppState {
   projects: Project[];
   openTabs: Tab[];
   checkboxStates: Record<string, Record<string, boolean>>;
+  dismissedCliPaths: string[];
 }
 
 const DEFAULT_STATE: AppState = {
@@ -27,6 +28,7 @@ const DEFAULT_STATE: AppState = {
   projects: [],
   openTabs: [],
   checkboxStates: {},
+  dismissedCliPaths: [],
 };
 
 function getDefaultStatePath(): string {
