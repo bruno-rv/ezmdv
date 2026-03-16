@@ -159,13 +159,18 @@ export function GraphPanel({
   }, [graph]);
 
   useEffect(() => {
-    if (!searchQuery.trim()) { setSearchMatches(null); return; }
+    if (!searchQuery.trim()) { setSearchMatches(null); setSearching(false); return; }
     let cancelled = false;
     setSearching(true);
     const id = setTimeout(async () => {
-      const res = await searchProjectContent(projectId, searchQuery.trim());
-      if (!cancelled) setSearchMatches(new Set(res.results.map(r => r.filePath)));
-      if (!cancelled) setSearching(false);
+      try {
+        const res = await searchProjectContent(projectId, searchQuery.trim());
+        if (!cancelled) setSearchMatches(new Set(res.results.map(r => r.filePath)));
+      } catch {
+        if (!cancelled) setSearchMatches(new Set());
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
     }, 200);
     return () => { cancelled = true; clearTimeout(id); };
   }, [projectId, searchQuery]);
@@ -253,23 +258,48 @@ export function GraphPanel({
       clearTimeout(hoverTimerRef.current);
       hoverTimerRef.current = null;
     }
+  }, []);
+
+  const handlePreviewClose = useCallback(() => {
     setPreview(null);
   }, []);
 
+  const dragStateRef = useRef<DragState | null>(null);
+  dragStateRef.current = dragState;
+
   const handleSVGMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!dragState) return;
+      const ds = dragStateRef.current;
+      if (!ds) return;
       const coords = getSVGCoords(e, svgRef);
       if (!coords) return;
       isDragging.current = true;
-      const newX = Math.min(WIDTH - 70, Math.max(70, dragState.startNodeX + coords.x - dragState.startSVGX));
-      const newY = Math.min(HEIGHT - 70, Math.max(70, dragState.startNodeY + coords.y - dragState.startSVGY));
-      setDraggedPositions((prev) => new Map(prev).set(dragState.nodeId, { x: newX, y: newY }));
+      const newX = Math.min(WIDTH - 70, Math.max(70, ds.startNodeX + coords.x - ds.startSVGX));
+      const newY = Math.min(HEIGHT - 70, Math.max(70, ds.startNodeY + coords.y - ds.startSVGY));
+
+      // Directly update the SVG element to avoid re-rendering the entire graph
+      const svg = svgRef.current;
+      if (svg) {
+        const group = svg.querySelector(`[data-node-id="${ds.nodeId}"]`) as SVGGElement | null;
+        if (group) {
+          group.setAttribute('transform', `translate(${newX - ds.startNodeX}, ${newY - ds.startNodeY})`);
+        }
+      }
+
+      // Store the pending position for commit on mouseup
+      dragPendingRef.current = { nodeId: ds.nodeId, x: newX, y: newY };
     },
-    [dragState],
+    [],
   );
 
+  const dragPendingRef = useRef<{ nodeId: string; x: number; y: number } | null>(null);
+
   const handleSVGMouseUp = useCallback(() => {
+    const pending = dragPendingRef.current;
+    if (pending) {
+      setDraggedPositions((prev) => new Map(prev).set(pending.nodeId, { x: pending.x, y: pending.y }));
+      dragPendingRef.current = null;
+    }
     setDragState(null);
   }, []);
 
@@ -391,6 +421,7 @@ export function GraphPanel({
               return (
                 <g
                   key={node.id}
+                  data-node-id={node.id}
                   opacity={dimmed ? 0.18 : 1}
                   className={cn(
                     'transition-opacity duration-150',
@@ -435,9 +466,9 @@ export function GraphPanel({
             })}
           </svg>
 
-          {/* Hover preview */}
+          {/* Hover preview modal */}
           {preview && (
-            <NodePreview preview={preview} />
+            <NodePreview preview={preview} onClose={handlePreviewClose} />
           )}
         </div>
       )}
@@ -451,33 +482,45 @@ export function GraphPanel({
   );
 }
 
-function NodePreview({ preview }: { preview: PreviewState }) {
-  // Clamp the card so it stays within the viewport
-  const CARD_W = 360;
-  const CARD_H = 280;
-  const OFFSET = 16;
-  const left = Math.min(preview.pos.x + OFFSET, window.innerWidth - CARD_W - 8);
-  const top = Math.min(preview.pos.y - OFFSET, window.innerHeight - CARD_H - 8);
+function NodePreview({ preview, onClose }: { preview: PreviewState; onClose: () => void }) {
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
 
   return (
     <div
-      className="pointer-events-none fixed z-50 flex flex-col overflow-hidden rounded-lg border border-border bg-popover shadow-xl"
-      style={{ left, top, width: CARD_W, maxHeight: CARD_H }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={onClose}
     >
-      <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2">
-        <span className="truncate text-xs font-semibold text-foreground">{preview.label}</span>
-      </div>
-      <div className="flex-1 overflow-hidden px-3 py-2">
-        {preview.loading ? (
-          <p className="text-xs text-muted-foreground">Loading preview…</p>
-        ) : preview.content !== null ? (
-          <div className="prose prose-sm dark:prose-invert max-w-none overflow-hidden text-xs [&>*:first-child]:mt-0">
+      <div
+        className="flex h-[80vh] w-[75vw] max-w-4xl flex-col rounded-lg border border-border bg-background shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-2">
+          <span className="truncate text-sm font-medium">{preview.label}</span>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClose}
+            aria-label="Close preview"
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto px-8 py-6">
+          {preview.loading ? (
+            <p className="text-sm text-muted-foreground">Loading preview…</p>
+          ) : preview.content !== null ? (
             <MarkdownView
-              content={preview.content.slice(0, 3000)}
+              content={preview.content}
               onLinkClick={noop}
             />
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     </div>
   );
