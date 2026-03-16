@@ -1,10 +1,9 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   ChevronRight,
   ChevronDown,
   File,
   FolderOpen,
-  FolderClosed,
   Upload,
   Trash2,
   Pencil,
@@ -14,19 +13,15 @@ import {
   X,
   PanelLeftClose,
   PanelLeftOpen,
-  Search,
-  Waypoints,
   Keyboard,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { ExpandedProjectContent } from '@/components/ExpandedProjectContent';
+import { GlobalSearch } from '@/components/GlobalSearch';
 import type { ProjectWithFiles } from '@/hooks/useProjects';
-import {
-  searchProjectContent,
-  type Tab,
-  type FileTreeEntry,
-} from '@/lib/api';
+import type { Tab } from '@/lib/api';
 
 interface SidebarProps {
   projects: ProjectWithFiles[];
@@ -47,225 +42,6 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   onOpenGraph: (projectId: string) => void;
   onShowShortcuts: () => void;
-}
-
-interface FileTreeNodeProps {
-  entry: FileTreeEntry;
-  projectId: string;
-  activeTab: Tab | null;
-  depth: number;
-  onFileClick: (projectId: string, filePath: string) => void;
-}
-
-function FileTreeNode({
-  entry,
-  projectId,
-  activeTab,
-  depth,
-  onFileClick,
-}: FileTreeNodeProps) {
-  const [expanded, setExpanded] = useState(false);
-
-  const isActive =
-    entry.type === 'file' &&
-    activeTab?.projectId === projectId &&
-    activeTab?.filePath === entry.path;
-
-  if (entry.type === 'directory') {
-    return (
-      <div>
-        <button
-          className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
-          onClick={() => setExpanded((prev) => !prev)}
-        >
-          {expanded ? (
-            <ChevronDown className="size-3.5 shrink-0" />
-          ) : (
-            <ChevronRight className="size-3.5 shrink-0" />
-          )}
-          {expanded ? (
-            <FolderOpen className="size-3.5 shrink-0 text-amber-500" />
-          ) : (
-            <FolderClosed className="size-3.5 shrink-0 text-amber-500" />
-          )}
-          <span className="truncate">{entry.name}</span>
-        </button>
-        {expanded && entry.children && (
-          <div>
-            {entry.children.map((child) => (
-              <FileTreeNode
-                key={child.path}
-                entry={child}
-                projectId={projectId}
-                activeTab={activeTab}
-                depth={depth + 1}
-                onFileClick={onFileClick}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <button
-      className={cn(
-        'flex w-full items-center gap-1.5 rounded px-2 py-1 text-sm transition-colors',
-        isActive
-          ? 'bg-accent font-medium text-accent-foreground'
-          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-      )}
-      style={{ paddingLeft: `${depth * 12 + 8}px` }}
-      onClick={() => onFileClick(projectId, entry.path)}
-    >
-      <File className="size-3.5 shrink-0 text-blue-500" />
-      <span className="truncate">{entry.name}</span>
-    </button>
-  );
-}
-
-function filterEntries(
-  entries: FileTreeEntry[],
-  matches: Set<string>,
-): FileTreeEntry[] {
-  const filtered: FileTreeEntry[] = [];
-
-  for (const entry of entries) {
-    if (entry.type === 'file') {
-      if (matches.has(entry.path)) {
-        filtered.push(entry);
-      }
-      continue;
-    }
-
-    const children = entry.children ? filterEntries(entry.children, matches) : [];
-    if (children.length > 0) {
-      filtered.push({
-        ...entry,
-        children,
-      });
-    }
-  }
-
-  return filtered;
-}
-
-interface ExpandedProjectContentProps {
-  project: ProjectWithFiles;
-  activeTab: Tab | null;
-  onFileClick: (projectId: string, filePath: string) => void;
-  onOpenGraph: (projectId: string) => void;
-}
-
-function ExpandedProjectContent({
-  project,
-  activeTab,
-  onFileClick,
-  onOpenGraph,
-}: ExpandedProjectContentProps) {
-  const [query, setQuery] = useState('');
-  const [searchMatches, setSearchMatches] = useState<Set<string> | null>(null);
-  const [searching, setSearching] = useState(false);
-
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (!trimmed) {
-      setSearchMatches(null);
-      setSearching(false);
-      return;
-    }
-
-    let cancelled = false;
-    const timeoutId = window.setTimeout(() => {
-      setSearching(true);
-      searchProjectContent(project.id, trimmed)
-        .then((response) => {
-          if (cancelled) return;
-          setSearchMatches(new Set(response.results.map((result) => result.filePath)));
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setSearchMatches(new Set());
-          }
-        })
-        .finally(() => {
-          if (!cancelled) {
-            setSearching(false);
-          }
-        });
-    }, 180);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [project.id, query]);
-
-  const visibleEntries = useMemo(() => {
-    if (!project.files) return [];
-    if (!searchMatches) return project.files;
-    return filterEntries(project.files, searchMatches);
-  }, [project.files, searchMatches]);
-
-  return (
-    <div className="ml-1 space-y-2">
-      <div className="flex items-center gap-2 px-3 pt-1">
-        <label className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search note text..."
-            className="h-8 w-full rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none ring-0 transition-colors focus:border-primary"
-          />
-        </label>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={() => onOpenGraph(project.id)}
-          aria-label={`Open graph for ${project.name}`}
-          title="Open graph"
-        >
-          <Waypoints className="size-4" />
-        </Button>
-      </div>
-
-      <div>
-        {project.filesLoading ? (
-          <p className="px-4 py-1 text-xs text-muted-foreground">
-            Loading...
-          </p>
-        ) : searching ? (
-          <p className="px-4 py-2 text-xs text-muted-foreground">
-            Searching...
-          </p>
-        ) : project.files && project.files.length > 0 ? (
-          visibleEntries.length > 0 ? (
-            visibleEntries.map((entry) => (
-              <FileTreeNode
-                key={entry.path}
-                entry={entry}
-                projectId={project.id}
-                activeTab={activeTab}
-                depth={1}
-                onFileClick={onFileClick}
-              />
-            ))
-          ) : (
-            <p className="px-4 py-2 text-xs text-muted-foreground">
-              {searchMatches !== null ? 'No markdown files match your search' : 'No markdown files found'}
-            </p>
-          )
-        ) : (
-          <p className="px-4 py-1 text-xs text-muted-foreground">
-            No markdown files found
-          </p>
-        )}
-      </div>
-    </div>
-  );
 }
 
 export function Sidebar({
@@ -296,14 +72,13 @@ export function Sidebar({
   const [expandedProjects, setExpandedProjects] = useState<
     Record<string, boolean>
   >({});
-  const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [globalFilter, setGlobalFilter] = useState<Map<string, Set<string>> | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
   const effectiveCollapsed = collapsed && isDesktop;
 
   useEffect(() => {
@@ -332,12 +107,18 @@ export function Sidebar({
 
   useEffect(() => {
     if (effectiveCollapsed) {
-      setShowUploadMenu(false);
       setSelectMode(false);
       setSelectedIds(new Set());
       setRenamingId(null);
     }
   }, [effectiveCollapsed]);
+
+  useEffect(() => {
+    if (!globalFilter) return;
+    for (const projectId of globalFilter.keys()) {
+      onExpandProject(projectId);
+    }
+  }, [globalFilter, onExpandProject]);
 
   const toggleProject = useCallback(
     (projectId: string) => {
@@ -423,23 +204,6 @@ export function Sidebar({
         onUploadFiles(Array.from(files));
       }
       e.target.value = '';
-      setShowUploadMenu(false);
-    },
-    [onUploadFiles],
-  );
-
-  const handleFolderUpload = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (files && files.length > 0) {
-        const fileArray = Array.from(files);
-        const relativePaths = fileArray.map(
-          (file) => file.webkitRelativePath || file.name,
-        );
-        onUploadFiles(fileArray, relativePaths);
-      }
-      e.target.value = '';
-      setShowUploadMenu(false);
     },
     [onUploadFiles],
   );
@@ -558,14 +322,27 @@ export function Sidebar({
               </div>
             )}
 
+            <div className="pt-2">
+              <GlobalSearch onFilterChange={setGlobalFilter} />
+            </div>
+
             <div className="flex-1 overflow-y-auto px-2 py-2">
               {projects.length === 0 ? (
                 <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                   No projects yet. Upload markdown files to get started.
                 </p>
+              ) : globalFilter && globalFilter.size === 0 ? (
+                <p className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  No matching files found
+                </p>
               ) : (
-                projects.map((project) => {
-                  const isExpanded = expandedProjects[project.id] ?? false;
+                (globalFilter
+                  ? projects.filter((p) => globalFilter.has(p.id))
+                  : projects
+                ).map((project) => {
+                  const isExpanded = globalFilter
+                    ? true
+                    : expandedProjects[project.id] ?? false;
                   const isSelected = selectedIds.has(project.id);
 
                   return (
@@ -656,6 +433,7 @@ export function Sidebar({
                             activeTab={activeTab}
                             onFileClick={onFileClick}
                             onOpenGraph={onOpenGraph}
+                            globalFilter={globalFilter?.get(project.id)}
                           />
                         </div>
                       )}
@@ -685,7 +463,7 @@ export function Sidebar({
                 </Button>
               </div>
             ) : !selectMode ? (
-              <div className="relative border-t border-border p-3">
+              <div className="border-t border-border p-3">
                 <div className="mb-2 flex items-center justify-end">
                   {projects.length > 0 && (
                     <Button
@@ -703,30 +481,11 @@ export function Sidebar({
                 <Button
                   variant="outline"
                   className="w-full justify-start gap-2"
-                  onClick={() => setShowUploadMenu((prev) => !prev)}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <Upload className="size-4" />
-                  Upload MD
+                  Upload
                 </Button>
-
-                {showUploadMenu && (
-                  <div className="absolute bottom-full left-3 right-3 mb-1 rounded-lg border border-border bg-popover p-1 shadow-lg">
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <File className="size-4" />
-                      Upload Files
-                    </button>
-                    <button
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted"
-                      onClick={() => folderInputRef.current?.click()}
-                    >
-                      <FolderOpen className="size-4" />
-                      Upload Folder
-                    </button>
-                  </div>
-                )}
 
                 <input
                   ref={fileInputRef}
@@ -735,14 +494,6 @@ export function Sidebar({
                   multiple
                   className="hidden"
                   onChange={handleFileUpload}
-                />
-                <input
-                  ref={folderInputRef}
-                  type="file"
-                  // @ts-expect-error webkitdirectory is non-standard but widely supported
-                  webkitdirectory=""
-                  className="hidden"
-                  onChange={handleFolderUpload}
                 />
               </div>
             ) : null}
