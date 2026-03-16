@@ -119,14 +119,14 @@ Open `http://localhost:5173` — changes hot-reload instantly via Vite HMR.
 
 ## Tests
 
-139 tests across 14 files using Vitest:
+157 tests across 16 files using Vitest:
 
 ```bash
 npm test
 ```
 
 - **Server** (92 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, fuzzy search (trigrams, stemming, scoring)
-- **Web** (47 tests, 8 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom
+- **Web** (65 tests, 10 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom, ExpandedProjectContent component, GlobalSearch component
 
 ## Local Data
 

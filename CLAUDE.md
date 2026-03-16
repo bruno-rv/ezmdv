@@ -35,10 +35,10 @@ For rapid iteration, use the dev workflow instead:
 - Terminal 2: `npm run dev:web` (Vite dev server with HMR, proxies API to :3000)
 - Open `http://localhost:5173` — changes hot-reload instantly, no manual build needed
 
-Tests use Vitest (139 tests across 14 files):
+Tests use Vitest (157 tests across 16 files):
 
 - **Server** (92 tests, 6 files): state read/write/update (`state.test.ts`), path traversal security (`security.test.ts`), markdown graph/search utilities (`markdown.test.ts`), filesystem scanning (`filesystem.test.ts`), API route smoke tests with supertest (`routes/projects.test.ts`) including global search, dismissed CLI paths, file creation, fuzzy search, folder creation, and project merging; fuzzy search unit tests (`fuzzySearch.test.ts`)
-- **Web** (47 tests, 8 files): wiki-link parsing/rendering, pane workspace, edit mode hook (`useEditMode.test.ts`), autoscroll hook (`useAutoScroll.test.ts`), graph filtering (`graphFilter.test.ts`), wiki-link autocomplete (`wikiLinkCompletion.test.ts`), graph zoom (`graphZoom.test.ts`)
+- **Web** (65 tests, 10 files): wiki-link parsing/rendering, pane workspace, edit mode hook (`useEditMode.test.ts`), autoscroll hook (`useAutoScroll.test.ts`), graph filtering (`graphFilter.test.ts`), wiki-link autocomplete (`wikiLinkCompletion.test.ts`), graph zoom (`graphZoom.test.ts`), search toolbar layout (`ExpandedProjectContent.test.tsx`, `GlobalSearch.test.tsx`)
 
 ## Architecture
 
