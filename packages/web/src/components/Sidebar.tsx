@@ -35,12 +35,17 @@ interface SidebarProps {
   onBulkDelete: (projectIds: string[]) => void;
   onBulkOpen: (projectIds: string[]) => void;
   onUploadFiles: (files: File[], relativePaths?: string[]) => void;
+  onUploadToProject?: (projectId: string, files: File[]) => void;
+  onMoveFile?: (destProjectId: string, sourceProjectId: string, sourceFilePath: string, destFilePath: string) => Promise<void>;
+  onMergeProject?: (destProjectId: string, sourceProjectId: string) => void;
+  onCreateFolder?: (projectId: string, folderPath: string) => void;
   autoExpandProjectId: string | null;
   isOpen: boolean;
   collapsed: boolean;
   onClose: () => void;
   onToggleCollapse: () => void;
   onOpenGraph: (projectId: string) => void;
+  onCreateFile: (projectId: string, filePath: string) => void;
   onShowShortcuts: () => void;
 }
 
@@ -56,12 +61,17 @@ export function Sidebar({
   onBulkDelete,
   onBulkOpen,
   onUploadFiles,
+  onUploadToProject,
+  onMoveFile,
+  onMergeProject,
+  onCreateFolder,
   autoExpandProjectId,
   isOpen,
   collapsed,
   onClose,
   onToggleCollapse,
   onOpenGraph,
+  onCreateFile,
   onShowShortcuts,
 }: SidebarProps) {
   const [isDesktop, setIsDesktop] = useState(() =>
@@ -77,6 +87,7 @@ export function Sidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [globalFilter, setGlobalFilter] = useState<Map<string, Set<string>> | null>(null);
+  const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const effectiveCollapsed = collapsed && isDesktop;
@@ -271,6 +282,16 @@ export function Sidebar({
             >
               <X className="size-4" />
             </Button>
+            {!effectiveCollapsed && !selectMode && projects.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setSelectMode(true)}
+                title="Select projects"
+              >
+                <ListChecks className="size-4" />
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -345,8 +366,62 @@ export function Sidebar({
                     : expandedProjects[project.id] ?? false;
                   const isSelected = selectedIds.has(project.id);
 
+                  const isDropTarget = dropTargetProjectId === project.id;
+
                   return (
-                    <div key={project.id} className="group/project mb-1">
+                    <div
+                      key={project.id}
+                      className={cn(
+                        'group/project mb-1 rounded',
+                        isDropTarget && 'bg-primary/10 ring-1 ring-primary/30',
+                      )}
+                      onDragOver={(e) => {
+                        if (
+                          e.dataTransfer.types.includes('application/x-ezmdv-file') ||
+                          e.dataTransfer.types.includes('application/x-ezmdv-project')
+                        ) {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          setDropTargetProjectId(project.id);
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          setDropTargetProjectId(null);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        setDropTargetProjectId(null);
+                        const projectRaw = e.dataTransfer.getData('application/x-ezmdv-project');
+                        if (projectRaw && onMergeProject) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          try {
+                            const { projectId: srcProjectId } = JSON.parse(projectRaw) as { projectId: string };
+                            if (srcProjectId === project.id) return;
+                            onMergeProject(project.id, srcProjectId);
+                          } catch {
+                            // ignore
+                          }
+                          return;
+                        }
+                        const raw = e.dataTransfer.getData('application/x-ezmdv-file');
+                        if (!raw || !onMoveFile) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        try {
+                          const { projectId: srcProjectId, filePath, fileName } = JSON.parse(raw) as {
+                            projectId: string;
+                            filePath: string;
+                            fileName: string;
+                          };
+                          if (srcProjectId === project.id) return;
+                          onMoveFile(project.id, srcProjectId, filePath, fileName);
+                        } catch {
+                          // ignore malformed data
+                        }
+                      }}
+                    >
                       <div className="flex items-center">
                         {selectMode ? (
                           <button
@@ -383,6 +458,14 @@ export function Sidebar({
                           <>
                             <button
                               className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1.5 text-sm font-medium transition-colors hover:bg-muted/50"
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData(
+                                  'application/x-ezmdv-project',
+                                  JSON.stringify({ projectId: project.id }),
+                                );
+                                e.dataTransfer.effectAllowed = 'move';
+                              }}
                               onClick={() => toggleProject(project.id)}
                               onDoubleClick={(e) => {
                                 e.stopPropagation();
@@ -433,7 +516,11 @@ export function Sidebar({
                             activeTab={activeTab}
                             onFileClick={onFileClick}
                             onOpenGraph={onOpenGraph}
+                            onCreateFile={onCreateFile}
+                            onCreateFolder={onCreateFolder}
+                            onUploadToProject={onUploadToProject}
                             globalFilter={globalFilter?.get(project.id)}
+                            draggable={!!onMoveFile}
                           />
                         </div>
                       )}
@@ -464,20 +551,6 @@ export function Sidebar({
               </div>
             ) : !selectMode ? (
               <div className="border-t border-border p-3">
-                <div className="mb-2 flex items-center justify-end">
-                  {projects.length > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setSelectMode(true)}
-                      aria-label="Select projects"
-                      title="Select projects"
-                    >
-                      <ListChecks className="size-4" />
-                    </Button>
-                  )}
-                </div>
-
                 <Button
                   variant="outline"
                   className="w-full justify-start gap-2"

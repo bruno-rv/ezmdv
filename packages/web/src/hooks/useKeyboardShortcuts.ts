@@ -22,6 +22,7 @@ interface UseKeyboardShortcutsOptions {
   setFullscreenPane: (pane: Pane | null) => void;
   setGraphPreview: (v: null) => void;
   autoScrollToggle: () => void;
+  refreshPaneContent: (pane: 'primary' | 'secondary') => void;
 }
 
 export function useKeyboardShortcuts({
@@ -44,6 +45,7 @@ export function useKeyboardShortcuts({
   setFullscreenPane,
   setGraphPreview,
   autoScrollToggle,
+  refreshPaneContent,
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -98,6 +100,14 @@ export function useKeyboardShortcuts({
         return;
       }
 
+      if (mod && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        if (!editMode) {
+          refreshPaneContent('primary');
+        }
+        return;
+      }
+
       if (mod && e.key === 'w') {
         e.preventDefault();
         if (activeTab) {
@@ -145,6 +155,7 @@ export function useKeyboardShortcuts({
     isDirty,
     primaryContent,
     primaryTab,
+    refreshPaneContent,
     setEditMode,
     setFullscreenPane,
     setGraphPreview,

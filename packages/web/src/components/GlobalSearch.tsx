@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { searchAllProjects } from '@/lib/api';
 
 interface GlobalSearchProps {
@@ -9,6 +10,7 @@ interface GlobalSearchProps {
 export function GlobalSearch({ onFilterChange }: GlobalSearchProps) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [searchMode, setSearchMode] = useState<'exact' | 'fuzzy'>('exact');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSearch = useCallback((value: string) => {
@@ -25,7 +27,7 @@ export function GlobalSearch({ onFilterChange }: GlobalSearchProps) {
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
       try {
-        const response = await searchAllProjects(value);
+        const response = await searchAllProjects(value, searchMode);
         const filter = new Map<string, Set<string>>();
         for (const result of response.results) {
           let paths = filter.get(result.projectId);
@@ -42,7 +44,11 @@ export function GlobalSearch({ onFilterChange }: GlobalSearchProps) {
         setLoading(false);
       }
     }, 250);
-  }, [onFilterChange]);
+  }, [onFilterChange, searchMode]);
+
+  useEffect(() => {
+    if (query.trim()) handleSearch(query);
+  }, [searchMode]);
 
   useEffect(() => {
     return () => {
@@ -76,6 +82,20 @@ export function GlobalSearch({ onFilterChange }: GlobalSearchProps) {
             <X className="size-3" />
           </button>
         )}
+      </div>
+      <div className="mt-1 flex items-center gap-1">
+        <button
+          className={cn(
+            'rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition-colors',
+            searchMode === 'fuzzy'
+              ? 'bg-primary/15 text-primary'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+          onClick={() => setSearchMode((prev) => (prev === 'exact' ? 'fuzzy' : 'exact'))}
+          title={searchMode === 'fuzzy' ? 'Switch to exact search' : 'Switch to fuzzy search'}
+        >
+          {searchMode === 'fuzzy' ? '~ Fuzzy' : 'Aa Exact'}
+        </button>
       </div>
       {loading && (
         <p className="mt-1 text-[11px] text-muted-foreground">Searching...</p>

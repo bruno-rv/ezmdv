@@ -44,6 +44,7 @@ export interface ProjectSearchResult {
   fileName: string;
   preview: string;
   matchCount: number;
+  score?: number;
 }
 
 export interface ProjectSearchResponse {
@@ -119,8 +120,10 @@ export async function fetchProjectGraph(
 export async function searchProjectContent(
   projectId: string,
   query: string,
+  mode?: 'exact' | 'fuzzy',
 ): Promise<ProjectSearchResponse> {
   const params = new URLSearchParams({ q: query });
+  if (mode && mode !== 'exact') params.set('mode', mode);
   return request<ProjectSearchResponse>(
     `/api/projects/${projectId}/search?${params.toString()}`,
   );
@@ -133,6 +136,7 @@ export interface GlobalSearchResult {
   fileName: string;
   preview: string;
   matchCount: number;
+  score?: number;
 }
 
 export interface GlobalSearchResponse {
@@ -142,8 +146,10 @@ export interface GlobalSearchResponse {
 
 export async function searchAllProjects(
   query: string,
+  mode?: 'exact' | 'fuzzy',
 ): Promise<GlobalSearchResponse> {
   const params = new URLSearchParams({ q: query });
+  if (mode && mode !== 'exact') params.set('mode', mode);
   return request<GlobalSearchResponse>(
     `/api/projects/search?${params.toString()}`,
   );
@@ -175,6 +181,16 @@ export async function deleteProject(
 ): Promise<void> {
   await request(`/api/projects/${projectId}`, {
     method: 'DELETE',
+  });
+}
+
+export async function createFile(
+  projectId: string,
+  filePath: string,
+): Promise<void> {
+  await request(`/api/projects/${projectId}/create-file`, {
+    method: 'POST',
+    body: JSON.stringify({ path: filePath }),
   });
 }
 
@@ -220,6 +236,52 @@ export async function fetchFileMetadata(
 ): Promise<FileMetadata> {
   return request<FileMetadata>(
     `/api/projects/${projectId}/file-meta?path=${encodeURIComponent(filePath)}`,
+  );
+}
+
+export interface MoveFileResponse {
+  moved: boolean;
+  destFilePath: string;
+  sourceProjectDeleted: boolean;
+}
+
+export async function moveFile(
+  destProjectId: string,
+  sourceProjectId: string,
+  sourceFilePath: string,
+  destFilePath: string,
+): Promise<MoveFileResponse> {
+  return request<MoveFileResponse>(`/api/projects/${destProjectId}/move-file`, {
+    method: 'POST',
+    body: JSON.stringify({ sourceProjectId, sourceFilePath, destFilePath }),
+  });
+}
+
+export async function createFolder(
+  projectId: string,
+  folderPath: string,
+): Promise<void> {
+  await request(`/api/projects/${projectId}/create-folder`, {
+    method: 'POST',
+    body: JSON.stringify({ path: folderPath }),
+  });
+}
+
+export interface MergeProjectResponse {
+  merged: boolean;
+  subfolderName: string;
+}
+
+export async function mergeProjectInto(
+  destProjectId: string,
+  sourceProjectId: string,
+): Promise<MergeProjectResponse> {
+  return request<MergeProjectResponse>(
+    `/api/projects/${destProjectId}/merge-project`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ sourceProjectId }),
+    },
   );
 }
 

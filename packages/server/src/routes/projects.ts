@@ -10,6 +10,7 @@ import {
   collectMarkdownFiles,
   searchProjectFiles,
 } from '../markdown.js';
+import { fuzzySearchProjectFiles } from '../fuzzySearch.js';
 import { IGNORED_DIRS } from '../constants.js';
 import { isPathWithinRoot, projectLookup, type ProjectRequest } from '../security.js';
 
@@ -260,6 +261,7 @@ export function createProjectRoutes(statePath?: string): Router {
   // GET /api/projects/search — global search across all projects
   router.get('/search', (req: Request, res: Response) => {
     const query = typeof req.query.q === 'string' ? req.query.q : '';
+    const mode = typeof req.query.mode === 'string' ? req.query.mode : 'exact';
     if (!query.trim()) {
       res.json({ query, results: [] });
       return;
@@ -273,11 +275,14 @@ export function createProjectRoutes(statePath?: string): Router {
       fileName: string;
       preview: string;
       matchCount: number;
+      score?: number;
     }> = [];
 
     for (const project of state.projects) {
       const files = collectMarkdownFiles(project.path);
-      const projectResults = searchProjectFiles(files, query);
+      const projectResults = mode === 'fuzzy'
+        ? fuzzySearchProjectFiles(files, query)
+        : searchProjectFiles(files, query);
       for (const result of projectResults) {
         allResults.push({
           projectId: project.id,
@@ -287,10 +292,14 @@ export function createProjectRoutes(statePath?: string): Router {
       }
     }
 
-    allResults.sort((a, b) => {
-      if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
-      return a.filePath.localeCompare(b.filePath);
-    });
+    if (mode === 'fuzzy') {
+      allResults.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    } else {
+      allResults.sort((a, b) => {
+        if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+        return a.filePath.localeCompare(b.filePath);
+      });
+    }
 
     res.json({ query, results: allResults });
   });
@@ -314,16 +323,17 @@ export function createProjectRoutes(statePath?: string): Router {
     const { project } = req as ProjectRequest;
 
     const query = typeof req.query.q === 'string' ? req.query.q : '';
+    const mode = typeof req.query.mode === 'string' ? req.query.mode : 'exact';
     if (!query.trim()) {
       res.json({ query, results: [] });
       return;
     }
 
     const files = collectMarkdownFiles(project.path);
-    res.json({
-      query,
-      results: searchProjectFiles(files, query),
-    });
+    const results = mode === 'fuzzy'
+      ? fuzzySearchProjectFiles(files, query)
+      : searchProjectFiles(files, query);
+    res.json({ query, results });
   });
 
   // GET /api/projects/:id/files/* — read a file
@@ -380,6 +390,175 @@ export function createProjectRoutes(statePath?: string): Router {
     }
   });
 
+  // POST /api/projects/:id/create-file
+  router.post('/:id/create-file', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
+    const { path: filePath } = req.body as { path: string };
+
+    if (!filePath || typeof filePath !== 'string') {
+      res.status(400).json({ error: 'path is required' });
+      return;
+    }
+
+    if (!filePath.toLowerCase().endsWith('.md')) {
+      res.status(400).json({ error: 'Only .md files can be created' });
+      return;
+    }
+
+    const fullPath = path.join(project.path, filePath);
+    if (!isPathWithinRoot(fullPath, project.path)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    if (fs.existsSync(fullPath)) {
+      res.status(409).json({ error: 'File already exists' });
+      return;
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, '', 'utf-8');
+      res.status(201).json({ created: filePath });
+    } catch {
+      res.status(500).json({ error: 'Failed to create file' });
+    }
+  });
+
+  // POST /api/projects/:id/create-folder
+  router.post('/:id/create-folder', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
+    const { path: folderPath } = req.body as { path: string };
+
+    if (!folderPath || typeof folderPath !== 'string') {
+      res.status(400).json({ error: 'path is required' });
+      return;
+    }
+
+    const fullPath = path.join(project.path, folderPath);
+    if (!isPathWithinRoot(fullPath, project.path)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    if (fs.existsSync(fullPath)) {
+      res.status(409).json({ error: 'Folder already exists' });
+      return;
+    }
+
+    try {
+      fs.mkdirSync(fullPath, { recursive: true });
+      res.status(201).json({ created: folderPath });
+    } catch {
+      res.status(500).json({ error: 'Failed to create folder' });
+    }
+  });
+
+  // POST /api/projects/:id/merge-project
+  router.post('/:id/merge-project', withProject, (req: Request, res: Response) => {
+    const { project: destProject } = req as ProjectRequest;
+    const { sourceProjectId } = req.body as { sourceProjectId?: string };
+
+    if (!sourceProjectId) {
+      res.status(400).json({ error: 'sourceProjectId is required' });
+      return;
+    }
+
+    if (sourceProjectId === destProject.id) {
+      res.status(400).json({ error: 'Cannot merge a project into itself' });
+      return;
+    }
+
+    const state = readState(statePath);
+    const sourceProject = state.projects.find((p) => p.id === sourceProjectId);
+    if (!sourceProject) {
+      res.status(404).json({ error: 'Source project not found' });
+      return;
+    }
+
+    const sourceName = path.basename(sourceProject.path);
+    const destSubfolder = path.join(destProject.path, sourceName);
+
+    if (fs.existsSync(destSubfolder)) {
+      res.status(409).json({ error: `Subfolder "${sourceName}" already exists in destination` });
+      return;
+    }
+
+    function copyDirRecursive(src: string, dest: string, destRoot: string): void {
+      fs.mkdirSync(dest, { recursive: true });
+      const entries = fs.readdirSync(src, { withFileTypes: true });
+      for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (!isPathWithinRoot(destPath, destRoot)) continue;
+        if (entry.isDirectory()) {
+          if (IGNORED_DIRS.has(entry.name)) continue;
+          copyDirRecursive(srcPath, destPath, destRoot);
+        } else {
+          fs.copyFileSync(srcPath, destPath);
+        }
+      }
+    }
+
+    try {
+      copyDirRecursive(sourceProject.path, destSubfolder, destProject.path);
+    } catch {
+      res.status(500).json({ error: 'Failed to copy files' });
+      return;
+    }
+
+    if (sourceProject.source === 'upload') {
+      const uploadsRoot = path.resolve(path.join(os.homedir(), '.ezmdv', 'uploads'));
+      if (isPathWithinRoot(sourceProject.path, uploadsRoot)) {
+        try {
+          fs.rmSync(sourceProject.path, { recursive: true, force: true });
+        } catch {
+          // best effort
+        }
+      }
+    } else {
+      state.dismissedCliPaths = state.dismissedCliPaths ?? [];
+      if (!state.dismissedCliPaths.includes(sourceProject.path)) {
+        state.dismissedCliPaths.push(sourceProject.path);
+      }
+    }
+
+    state.projects = state.projects.filter((p) => p.id !== sourceProjectId);
+
+    state.openTabs = state.openTabs.map((t) => {
+      if (t.projectId === sourceProjectId) {
+        return {
+          projectId: destProject.id,
+          filePath: `${sourceName}/${t.filePath}`,
+        };
+      }
+      return t;
+    });
+
+    const newCheckboxStates: Record<string, Record<string, boolean>> = {};
+    for (const [key, value] of Object.entries(state.checkboxStates)) {
+      if (key.startsWith(`${sourceProjectId}:`)) {
+        const filePart = key.slice(sourceProjectId.length + 1);
+        newCheckboxStates[`${destProject.id}:${sourceName}/${filePart}`] = value;
+      } else {
+        newCheckboxStates[key] = value;
+      }
+    }
+    state.checkboxStates = newCheckboxStates;
+
+    updateState(
+      {
+        projects: state.projects,
+        openTabs: state.openTabs,
+        checkboxStates: state.checkboxStates,
+        dismissedCliPaths: state.dismissedCliPaths,
+      },
+      statePath,
+    );
+
+    res.json({ merged: true, subfolderName: sourceName });
+  });
+
   // POST /api/projects/:id/upload
   router.post(
     '/:id/upload',
@@ -431,6 +610,86 @@ export function createProjectRoutes(statePath?: string): Router {
       res.json({ uploaded: savedFiles });
     },
   );
+
+  // POST /api/projects/:id/move-file — move a file from another project
+  router.post('/:id/move-file', withProject, (req: Request, res: Response) => {
+    const { project: destProject } = req as ProjectRequest;
+    const { sourceProjectId, sourceFilePath, destFilePath } = req.body as {
+      sourceProjectId?: string;
+      sourceFilePath?: string;
+      destFilePath?: string;
+    };
+
+    if (!sourceProjectId || !sourceFilePath || !destFilePath) {
+      res.status(400).json({ error: 'sourceProjectId, sourceFilePath, and destFilePath are required' });
+      return;
+    }
+
+    if (!destFilePath.toLowerCase().endsWith('.md')) {
+      res.status(400).json({ error: 'destFilePath must end with .md' });
+      return;
+    }
+
+    const state = readState(statePath);
+    const sourceProject = state.projects.find((p) => p.id === sourceProjectId);
+    if (!sourceProject) {
+      res.status(404).json({ error: 'Source project not found' });
+      return;
+    }
+
+    const sourceFullPath = path.join(sourceProject.path, sourceFilePath);
+    if (!isPathWithinRoot(sourceFullPath, sourceProject.path)) {
+      res.status(403).json({ error: 'Source path access denied' });
+      return;
+    }
+
+    const destFullPath = path.join(destProject.path, destFilePath);
+    if (!isPathWithinRoot(destFullPath, destProject.path)) {
+      res.status(403).json({ error: 'Destination path access denied' });
+      return;
+    }
+
+    if (!fs.existsSync(sourceFullPath)) {
+      res.status(404).json({ error: 'Source file not found' });
+      return;
+    }
+
+    if (fs.existsSync(destFullPath)) {
+      res.status(409).json({ error: 'Destination file already exists' });
+      return;
+    }
+
+    try {
+      const content = fs.readFileSync(sourceFullPath, 'utf-8');
+      fs.mkdirSync(path.dirname(destFullPath), { recursive: true });
+      fs.writeFileSync(destFullPath, content, 'utf-8');
+      fs.unlinkSync(sourceFullPath);
+    } catch {
+      res.status(500).json({ error: 'Failed to move file' });
+      return;
+    }
+
+    let sourceProjectDeleted = false;
+    if (sourceProject.source === 'upload') {
+      const remaining = listMarkdownFiles(sourceProject.path, sourceProject.path);
+      if (remaining.length === 0) {
+        const uploadsRoot = path.resolve(path.join(os.homedir(), '.ezmdv', 'uploads'));
+        if (isPathWithinRoot(sourceProject.path, uploadsRoot)) {
+          try {
+            fs.rmSync(sourceProject.path, { recursive: true, force: true });
+          } catch {
+            // best effort
+          }
+        }
+        state.projects = state.projects.filter((p) => p.id !== sourceProjectId);
+        state.openTabs = state.openTabs.filter((t) => t.projectId !== sourceProjectId);
+        updateState({ projects: state.projects, openTabs: state.openTabs }, statePath);
+        sourceProjectDeleted = true;
+      }
+    }
+
+    res.json({ moved: true, destFilePath, sourceProjectDeleted });
+  });
 
   return router;
 }

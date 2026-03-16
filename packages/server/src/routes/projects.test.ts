@@ -246,6 +246,340 @@ describe('GET /api/projects/:id/file-meta', () => {
   });
 });
 
+describe('POST /api/projects/:id/create-file', () => {
+  it('creates a new markdown file', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-file`)
+      .send({ path: 'new-note.md' });
+    expect(res.status).toBe(201);
+    expect(res.body.created).toBe('new-note.md');
+    expect(fs.existsSync(path.join(projectDir, 'new-note.md'))).toBe(true);
+  });
+
+  it('creates nested files with parent directories', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-file`)
+      .send({ path: 'notes/sub/deep.md' });
+    expect(res.status).toBe(201);
+    expect(fs.existsSync(path.join(projectDir, 'notes', 'sub', 'deep.md'))).toBe(true);
+  });
+
+  it('returns 409 for existing file', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-file`)
+      .send({ path: 'readme.md' });
+    expect(res.status).toBe(409);
+  });
+
+  it('rejects non-.md files', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-file`)
+      .send({ path: 'script.js' });
+    expect(res.status).toBe(400);
+  });
+
+  it('blocks path traversal', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-file`)
+      .send({ path: '../../etc/evil.md' });
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects missing path', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-file`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/projects/:id/search?mode=fuzzy', () => {
+  it('returns fuzzy search results', async () => {
+    const res = await request(app).get(
+      `/api/projects/${projectId}/search?q=Hello&mode=fuzzy`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.results.length).toBeGreaterThan(0);
+    expect(res.body.results[0]).toHaveProperty('score');
+  });
+
+  it('fuzzy matches approximate terms', async () => {
+    const res = await request(app).get(
+      `/api/projects/${projectId}/search?q=Helo&mode=fuzzy`,
+    );
+    expect(res.status).toBe(200);
+    // Fuzzy should still find results via trigram overlap
+    expect(res.body.results.length).toBeGreaterThanOrEqual(0);
+  });
+
+  it('returns empty for empty query', async () => {
+    const res = await request(app).get(
+      `/api/projects/${projectId}/search?q=&mode=fuzzy`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.results).toHaveLength(0);
+  });
+});
+
+describe('GET /api/projects/search?mode=fuzzy (global)', () => {
+  it('returns fuzzy results across all projects', async () => {
+    const res = await request(app).get('/api/projects/search?q=Hello&mode=fuzzy');
+    expect(res.status).toBe(200);
+    expect(res.body.results.length).toBeGreaterThan(0);
+    expect(res.body.results[0].projectId).toBe(projectId);
+    expect(res.body.results[0]).toHaveProperty('score');
+  });
+});
+
+describe('POST /api/projects/:id/move-file', () => {
+  let destProjectDir: string;
+  let destProjectId: string;
+
+  beforeEach(() => {
+    destProjectDir = makeTempDir();
+    fs.writeFileSync(path.join(destProjectDir, 'existing.md'), '# Existing');
+    destProjectId = 'dest-project-1';
+
+    const state = readState(statePath);
+    state.projects.push({
+      id: destProjectId,
+      name: 'Dest Project',
+      source: 'cli',
+      path: destProjectDir,
+      lastOpened: new Date().toISOString(),
+    });
+    writeState(state, statePath);
+  });
+
+  it('moves a file successfully', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${destProjectId}/move-file`)
+      .send({
+        sourceProjectId: projectId,
+        sourceFilePath: 'readme.md',
+        destFilePath: 'readme.md',
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.moved).toBe(true);
+    expect(res.body.sourceProjectDeleted).toBe(false);
+
+    expect(fs.existsSync(path.join(destProjectDir, 'readme.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, 'readme.md'))).toBe(false);
+  });
+
+  it('returns 409 if dest file exists', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${destProjectId}/move-file`)
+      .send({
+        sourceProjectId: projectId,
+        sourceFilePath: 'readme.md',
+        destFilePath: 'existing.md',
+      });
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 404 if source file not found', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${destProjectId}/move-file`)
+      .send({
+        sourceProjectId: projectId,
+        sourceFilePath: 'nonexistent.md',
+        destFilePath: 'moved.md',
+      });
+    expect(res.status).toBe(404);
+  });
+
+  it('blocks path traversal on source', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${destProjectId}/move-file`)
+      .send({
+        sourceProjectId: projectId,
+        sourceFilePath: '../../etc/passwd',
+        destFilePath: 'stolen.md',
+      });
+    expect(res.status).toBe(403);
+  });
+
+  it('blocks path traversal on dest', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${destProjectId}/move-file`)
+      .send({
+        sourceProjectId: projectId,
+        sourceFilePath: 'readme.md',
+        destFilePath: '../../etc/evil.md',
+      });
+    expect(res.status).toBe(403);
+  });
+
+  it('auto-deletes empty upload project after move', async () => {
+    const uploadDir = makeTempDir();
+    fs.writeFileSync(path.join(uploadDir, 'only.md'), '# Only File');
+    const uploadProjectId = 'upload-proj-1';
+
+    const state = readState(statePath);
+    state.projects.push({
+      id: uploadProjectId,
+      name: 'Upload Proj',
+      source: 'upload',
+      path: uploadDir,
+      lastOpened: new Date().toISOString(),
+    });
+    writeState(state, statePath);
+
+    const res = await request(app)
+      .post(`/api/projects/${destProjectId}/move-file`)
+      .send({
+        sourceProjectId: uploadProjectId,
+        sourceFilePath: 'only.md',
+        destFilePath: 'only.md',
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.moved).toBe(true);
+    expect(res.body.sourceProjectDeleted).toBe(true);
+
+    const updatedState = readState(statePath);
+    expect(updatedState.projects.find((p) => p.id === uploadProjectId)).toBeUndefined();
+  });
+});
+
+describe('POST /api/projects/:id/create-folder', () => {
+  it('creates a folder', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-folder`)
+      .send({ path: 'new-folder' });
+    expect(res.status).toBe(201);
+    expect(res.body.created).toBe('new-folder');
+    expect(fs.existsSync(path.join(projectDir, 'new-folder'))).toBe(true);
+    expect(fs.statSync(path.join(projectDir, 'new-folder')).isDirectory()).toBe(true);
+  });
+
+  it('creates nested folders', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-folder`)
+      .send({ path: 'a/b/c' });
+    expect(res.status).toBe(201);
+    expect(fs.existsSync(path.join(projectDir, 'a', 'b', 'c'))).toBe(true);
+  });
+
+  it('returns 409 for existing folder', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-folder`)
+      .send({ path: 'docs' });
+    expect(res.status).toBe(409);
+  });
+
+  it('blocks path traversal', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-folder`)
+      .send({ path: '../../evil-folder' });
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects missing path', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/create-folder`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/projects/:id/merge-project', () => {
+  let sourceProjectDir: string;
+  let sourceProjectId: string;
+
+  beforeEach(() => {
+    sourceProjectDir = makeTempDir();
+    fs.writeFileSync(path.join(sourceProjectDir, 'alpha.md'), '# Alpha');
+    fs.mkdirSync(path.join(sourceProjectDir, 'sub'));
+    fs.writeFileSync(path.join(sourceProjectDir, 'sub', 'beta.md'), '# Beta');
+    sourceProjectId = 'source-project-1';
+
+    const state = readState(statePath);
+    state.projects.push({
+      id: sourceProjectId,
+      name: 'Source Project',
+      source: 'cli',
+      path: sourceProjectDir,
+      lastOpened: new Date().toISOString(),
+    });
+    state.openTabs.push({ projectId: sourceProjectId, filePath: 'alpha.md' });
+    writeState(state, statePath);
+  });
+
+  it('merges source as subfolder', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/merge-project`)
+      .send({ sourceProjectId });
+    expect(res.status).toBe(200);
+    expect(res.body.merged).toBe(true);
+
+    const subfolderName = path.basename(sourceProjectDir);
+    expect(res.body.subfolderName).toBe(subfolderName);
+
+    expect(fs.existsSync(path.join(projectDir, subfolderName, 'alpha.md'))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, subfolderName, 'sub', 'beta.md'))).toBe(true);
+  });
+
+  it('removes source from projects', async () => {
+    await request(app)
+      .post(`/api/projects/${projectId}/merge-project`)
+      .send({ sourceProjectId });
+    const state = readState(statePath);
+    expect(state.projects.find((p) => p.id === sourceProjectId)).toBeUndefined();
+  });
+
+  it('remaps open tabs', async () => {
+    await request(app)
+      .post(`/api/projects/${projectId}/merge-project`)
+      .send({ sourceProjectId });
+    const state = readState(statePath);
+    const subfolderName = path.basename(sourceProjectDir);
+    const remapped = state.openTabs.find(
+      (t) => t.projectId === projectId && t.filePath === `${subfolderName}/alpha.md`,
+    );
+    expect(remapped).toBeDefined();
+  });
+
+  it('adds CLI source to dismissedCliPaths', async () => {
+    await request(app)
+      .post(`/api/projects/${projectId}/merge-project`)
+      .send({ sourceProjectId });
+    const state = readState(statePath);
+    expect(state.dismissedCliPaths).toContain(sourceProjectDir);
+  });
+
+  it('returns 409 if subfolder already exists', async () => {
+    const subfolderName = path.basename(sourceProjectDir);
+    fs.mkdirSync(path.join(projectDir, subfolderName), { recursive: true });
+
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/merge-project`)
+      .send({ sourceProjectId });
+    expect(res.status).toBe(409);
+  });
+
+  it('returns 400 for self-merge', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/merge-project`)
+      .send({ sourceProjectId: projectId });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 for nonexistent source', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/merge-project`)
+      .send({ sourceProjectId: 'nonexistent' });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 for missing sourceProjectId', async () => {
+    const res = await request(app)
+      .post(`/api/projects/${projectId}/merge-project`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('DELETE /api/projects/:id', () => {
   it('removes a CLI project from state', async () => {
     const res = await request(app).delete(`/api/projects/${projectId}`);

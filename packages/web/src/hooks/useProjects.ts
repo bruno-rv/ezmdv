@@ -6,8 +6,13 @@ import {
   uploadFiles,
   deleteProject,
   renameProject as apiRenameProject,
+  moveFile,
+  createFolder,
+  mergeProjectInto,
   type Project,
   type FileTreeEntry,
+  type MoveFileResponse,
+  type MergeProjectResponse,
 } from '@/lib/api';
 
 export interface ProjectWithFiles extends Project {
@@ -23,9 +28,17 @@ export function useProjects() {
     try {
       setLoading(true);
       const data = await fetchProjects();
-      setProjects(
-        data.map((p) => ({ ...p, files: undefined, filesLoading: false })),
-      );
+      setProjects((prev) => {
+        const existingById = new Map(prev.map((p) => [p.id, p]));
+        return data.map((p) => {
+          const existing = existingById.get(p.id);
+          return {
+            ...p,
+            files: existing?.files,
+            filesLoading: existing?.filesLoading ?? false,
+          };
+        });
+      });
     } catch {
       // Silently fail if backend is unavailable
     } finally {
@@ -91,6 +104,46 @@ export function useProjects() {
     setProjects((prev) => prev.filter((p) => !idSet.has(p.id)));
   }, []);
 
+  const moveFileBetweenProjects = useCallback(
+    async (
+      destProjectId: string,
+      sourceProjectId: string,
+      sourceFilePath: string,
+      destFilePath: string,
+    ): Promise<MoveFileResponse> => {
+      const result = await moveFile(destProjectId, sourceProjectId, sourceFilePath, destFilePath);
+      if (result.sourceProjectDeleted) {
+        setProjects((prev) => prev.filter((p) => p.id !== sourceProjectId));
+      } else {
+        await loadProjectFiles(sourceProjectId);
+      }
+      await loadProjectFiles(destProjectId);
+      return result;
+    },
+    [loadProjectFiles],
+  );
+
+  const createProjectFolder = useCallback(
+    async (projectId: string, folderPath: string) => {
+      await createFolder(projectId, folderPath);
+      await loadProjectFiles(projectId);
+    },
+    [loadProjectFiles],
+  );
+
+  const mergeProject = useCallback(
+    async (
+      destProjectId: string,
+      sourceProjectId: string,
+    ): Promise<MergeProjectResponse> => {
+      const result = await mergeProjectInto(destProjectId, sourceProjectId);
+      setProjects((prev) => prev.filter((p) => p.id !== sourceProjectId));
+      await loadProjectFiles(destProjectId);
+      return result;
+    },
+    [loadProjectFiles],
+  );
+
   const uploadToProject = useCallback(
     async (
       projectId: string,
@@ -114,5 +167,8 @@ export function useProjects() {
     removeProject,
     removeProjects,
     uploadToProject,
+    moveFileBetweenProjects,
+    createProjectFolder,
+    mergeProject,
   };
 }

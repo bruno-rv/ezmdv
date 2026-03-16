@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { X, Search } from 'lucide-react';
+import { X, Search, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ProjectGraph, GraphNode, GraphEdge } from '@/lib/api';
 import { fetchFileContent, searchProjectContent } from '@/lib/api';
 import { MarkdownView } from '@/components/MarkdownView';
 import { cn } from '@/lib/utils';
 import { filterGraphBySearch } from '@/lib/graphFilter';
+import { computeViewBox, clampZoom, WIDTH, HEIGHT, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/lib/graphZoom';
 
 interface GraphPanelProps {
   projectName: string;
@@ -30,6 +31,13 @@ interface DragState {
   startNodeY: number;
 }
 
+interface PanState {
+  startX: number;
+  startY: number;
+  startPanX: number;
+  startPanY: number;
+}
+
 interface PreviewState {
   nodeId: string;
   filePath: string;
@@ -39,8 +47,6 @@ interface PreviewState {
   pos: { x: number; y: number };
 }
 
-const WIDTH = 1200;
-const HEIGHT = 760;
 const HOVER_DELAY_MS = 5000;
 
 function buildLayout(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
@@ -98,8 +104,8 @@ function buildLayout(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
     for (const node of next) {
       node.x += (WIDTH / 2 - node.x) * 0.014;
       node.y += (HEIGHT / 2 - node.y) * 0.014;
-      node.x = Math.min(WIDTH - 70, Math.max(70, node.x));
-      node.y = Math.min(HEIGHT - 70, Math.max(70, node.y));
+      node.x = Math.min(WIDTH - 30, Math.max(30, node.x));
+      node.y = Math.min(HEIGHT - 30, Math.max(30, node.y));
     }
 
     for (let i = 0; i < positioned.length; i++) {
@@ -148,6 +154,11 @@ export function GraphPanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMatches, setSearchMatches] = useState<Set<string> | null>(null);
   const [searching, setSearching] = useState(false);
+  const [animTime, setAnimTime] = useState(0);
+  const animRef = useRef<number>(0);
+  const [zoom, setZoom] = useState(1);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const panStateRef = useRef<PanState | null>(null);
 
   useEffect(() => {
     setDraggedPositions(new Map());
@@ -156,6 +167,8 @@ export function GraphPanel({
     setPreview(null);
     setSearchQuery('');
     setSearchMatches(null);
+    setZoom(1);
+    setPanOffset({ x: 0, y: 0 });
   }, [graph]);
 
   useEffect(() => {
@@ -175,6 +188,22 @@ export function GraphPanel({
     return () => { cancelled = true; clearTimeout(id); };
   }, [projectId, searchQuery]);
 
+  useEffect(() => {
+    if (dragState) return;
+    let running = true;
+    const tick = (t: number) => {
+      if (running) {
+        setAnimTime(t);
+        animRef.current = requestAnimationFrame(tick);
+      }
+    };
+    animRef.current = requestAnimationFrame(tick);
+    return () => {
+      running = false;
+      cancelAnimationFrame(animRef.current);
+    };
+  }, [dragState]);
+
   const filteredGraph = useMemo(() => filterGraphBySearch(graph, searchMatches), [graph, searchMatches]);
 
   const positionedNodes = useMemo(
@@ -193,6 +222,11 @@ export function GraphPanel({
 
   const effectiveNodesById = useMemo(
     () => new Map(effectiveNodes.map((node) => [node.id, node])),
+    [effectiveNodes],
+  );
+
+  const nodeIndexById = useMemo(
+    () => new Map(effectiveNodes.map((node, i) => [node.id, i])),
     [effectiveNodes],
   );
 
@@ -269,39 +303,97 @@ export function GraphPanel({
 
   const handleSVGMouseMove = useCallback(
     (e: React.MouseEvent) => {
+      const ps = panStateRef.current;
+      if (ps) {
+        const coords = getSVGCoords(e, svgRef);
+        if (!coords) return;
+        isDragging.current = true;
+        setPanOffset({
+          x: ps.startPanX - (coords.x - ps.startX),
+          y: ps.startPanY - (coords.y - ps.startY),
+        });
+        return;
+      }
       const ds = dragStateRef.current;
       if (!ds) return;
       const coords = getSVGCoords(e, svgRef);
       if (!coords) return;
       isDragging.current = true;
-      const newX = Math.min(WIDTH - 70, Math.max(70, ds.startNodeX + coords.x - ds.startSVGX));
-      const newY = Math.min(HEIGHT - 70, Math.max(70, ds.startNodeY + coords.y - ds.startSVGY));
+      const newX = Math.min(WIDTH + 60, Math.max(-60, ds.startNodeX + coords.x - ds.startSVGX));
+      const newY = Math.min(HEIGHT + 60, Math.max(-60, ds.startNodeY + coords.y - ds.startSVGY));
 
-      // Directly update the SVG element to avoid re-rendering the entire graph
-      const svg = svgRef.current;
-      if (svg) {
-        const group = svg.querySelector(`[data-node-id="${ds.nodeId}"]`) as SVGGElement | null;
-        if (group) {
-          group.setAttribute('transform', `translate(${newX - ds.startNodeX}, ${newY - ds.startNodeY})`);
-        }
-      }
-
-      // Store the pending position for commit on mouseup
-      dragPendingRef.current = { nodeId: ds.nodeId, x: newX, y: newY };
+      setDraggedPositions((prev) => new Map(prev).set(ds.nodeId, { x: newX, y: newY }));
     },
     [],
   );
 
-  const dragPendingRef = useRef<{ nodeId: string; x: number; y: number } | null>(null);
-
   const handleSVGMouseUp = useCallback(() => {
-    const pending = dragPendingRef.current;
-    if (pending) {
-      setDraggedPositions((prev) => new Map(prev).set(pending.nodeId, { x: pending.x, y: pending.y }));
-      dragPendingRef.current = null;
-    }
+    panStateRef.current = null;
     setDragState(null);
   }, []);
+
+  const handleZoomIn = useCallback(() => {
+    setZoom((z) => clampZoom(z + ZOOM_STEP));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom((z) => clampZoom(z - ZOOM_STEP));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setZoom(1);
+    setPanOffset({ x: 0, y: 0 });
+  }, []);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const pt = svg.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return;
+      const svgPt = pt.matrixTransform(ctm.inverse());
+
+      setZoom((prevZoom) => {
+        const newZoom = clampZoom(prevZoom + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+        if (newZoom === prevZoom) return prevZoom;
+        setPanOffset((prevPan) => {
+          const cx = WIDTH / 2 + prevPan.x;
+          const cy = HEIGHT / 2 + prevPan.y;
+          const newCx = svgPt.x + (cx - svgPt.x) * (prevZoom / newZoom);
+          const newCy = svgPt.y + (cy - svgPt.y) * (prevZoom / newZoom);
+          return { x: newCx - WIDTH / 2, y: newCy - HEIGHT / 2 };
+        });
+        return newZoom;
+      });
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        handleZoomIn();
+      } else if (e.key === '-') {
+        e.preventDefault();
+        handleZoomOut();
+      } else if (e.key === '0') {
+        e.preventDefault();
+        handleZoomReset();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleZoomIn, handleZoomOut, handleZoomReset]);
+
+  const viewBox = useMemo(() => computeViewBox(zoom, panOffset), [zoom, panOffset]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
@@ -363,60 +455,107 @@ export function GraphPanel({
           </p>
         </div>
       ) : (
-        <div className="relative flex-1 overflow-auto bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),radial-gradient(circle_at_bottom,_rgba(16,185,129,0.08),_transparent_32%)] p-4">
+        <div className="relative flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),_transparent_40%),radial-gradient(circle_at_bottom,_rgba(16,185,129,0.08),_transparent_32%)]">
           <svg
             ref={svgRef}
-            viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+            viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
             className={cn(
-              'min-h-[680px] min-w-[960px] select-none',
-              dragState ? 'cursor-grabbing' : '',
+              'h-full w-full select-none',
+              dragState || panStateRef.current ? 'cursor-grabbing' : '',
             )}
+            overflow="visible"
             role="img"
             aria-label={`${projectName} markdown graph`}
             onMouseMove={handleSVGMouseMove}
             onMouseUp={handleSVGMouseUp}
             onMouseLeave={handleSVGMouseUp}
           >
+            <defs>
+              <filter id="node-glow">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+                <feMerge>
+                  <feMergeNode in="blur"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+              <radialGradient id="grad-blue" cx="40%" cy="35%">
+                <stop offset="0%" stopColor="rgba(96,165,250,0.8)"/>
+                <stop offset="100%" stopColor="rgba(59,130,246,0.3)"/>
+              </radialGradient>
+              <radialGradient id="grad-pink" cx="40%" cy="35%">
+                <stop offset="0%" stopColor="rgba(244,114,182,0.7)"/>
+                <stop offset="100%" stopColor="rgba(244,114,182,0.25)"/>
+              </radialGradient>
+              <radialGradient id="grad-default" cx="40%" cy="35%">
+                <stop offset="0%" stopColor="rgba(148,163,184,0.6)"/>
+                <stop offset="100%" stopColor="rgba(100,116,139,0.25)"/>
+              </radialGradient>
+            </defs>
             <rect
-              x={0} y={0} width={WIDTH} height={HEIGHT}
+              x={viewBox.x - viewBox.w} y={viewBox.y - viewBox.h}
+              width={viewBox.w * 3} height={viewBox.h * 3}
               fill="transparent"
-              onClick={() => setSelectedNodeId(null)}
+              onMouseDown={(e) => {
+                if (e.shiftKey || e.button === 1) {
+                  e.preventDefault();
+                  const coords = getSVGCoords(e, svgRef);
+                  if (!coords) return;
+                  panStateRef.current = {
+                    startX: coords.x,
+                    startY: coords.y,
+                    startPanX: panOffset.x,
+                    startPanY: panOffset.y,
+                  };
+                } else {
+                  setSelectedNodeId(null);
+                }
+              }}
             />
 
             {filteredGraph.edges.map((edge) => {
               const source = effectiveNodesById.get(edge.source);
               const target = effectiveNodesById.get(edge.target);
               if (!source || !target) return null;
+              const si = nodeIndexById.get(edge.source) ?? 0;
+              const ti = nodeIndexById.get(edge.target) ?? 0;
+              const sx = dragState?.nodeId === edge.source ? source.x : source.x + Math.sin(animTime * 0.001 + si * 0.7) * 1.5;
+              const sy = dragState?.nodeId === edge.source ? source.y : source.y + Math.cos(animTime * 0.0012 + si * 0.5) * 1.2;
+              const tx = dragState?.nodeId === edge.target ? target.x : target.x + Math.sin(animTime * 0.001 + ti * 0.7) * 1.5;
+              const ty = dragState?.nodeId === edge.target ? target.y : target.y + Math.cos(animTime * 0.0012 + ti * 0.5) * 1.2;
               const edgeKey = `${edge.source}-${edge.target}-${edge.kind}-${edge.rawTarget}`;
               const isConnected = selection?.connectedEdgeKeys.has(edgeKey) ?? false;
               const dimmed = selection !== null && !isConnected;
               return (
                 <line
                   key={edgeKey}
-                  x1={source.x} y1={source.y}
-                  x2={target.x} y2={target.y}
-                  stroke={isConnected ? 'rgba(59,130,246,0.9)' : edge.kind === 'wiki' ? 'rgba(59,130,246,0.5)' : 'rgba(148,163,184,0.4)'}
+                  x1={sx} y1={sy}
+                  x2={tx} y2={ty}
+                  stroke={isConnected ? 'rgba(96,165,250,1.0)' : edge.kind === 'wiki' ? 'rgba(96,165,250,0.7)' : 'rgba(148,163,184,0.55)'}
                   strokeWidth={isConnected ? 2.5 : edge.kind === 'wiki' ? 1.8 : 1.2}
                   opacity={dimmed ? 0.08 : 1}
                 />
               );
             })}
 
-            {effectiveNodes.map((node) => {
+            {effectiveNodes.map((node, idx) => {
               const isOpen = node.filePath ? openFilePaths.has(node.filePath) : false;
               const isSelected = node.id === selectedNodeId;
               const isNeighbor = selection?.connectedNodeIds.has(node.id) ?? false;
               const dimmed = selection !== null && !isSelected && !isNeighbor;
               const radius = isSelected ? 22 : node.dangling ? 14 : isOpen ? 18 : 16;
               const fill = isSelected
-                ? 'rgba(59,130,246,0.45)'
-                : node.dangling ? 'rgba(244,114,182,0.18)'
-                : isOpen ? 'rgba(59,130,246,0.24)' : 'rgba(15,23,42,0.14)';
+                ? 'url(#grad-blue)'
+                : node.dangling ? 'url(#grad-pink)'
+                : isOpen ? 'url(#grad-blue)' : 'url(#grad-default)';
               const stroke = isSelected
-                ? 'rgba(59,130,246,1.0)'
+                ? 'rgba(96,165,250,1.0)'
                 : isNeighbor && selection ? 'rgba(99,155,246,0.85)'
-                : node.dangling ? 'rgba(244,114,182,0.7)'
-                : isOpen ? 'rgba(59,130,246,0.9)' : 'rgba(148,163,184,0.55)';
+                : node.dangling ? 'rgba(244,114,182,0.9)'
+                : isOpen ? 'rgba(96,165,250,1.0)' : 'rgba(148,163,184,0.7)';
+
+              const isDragTarget = dragState?.nodeId === node.id;
+              const floatX = isDragTarget ? node.x : node.x + Math.sin(animTime * 0.001 + idx * 0.7) * 1.5;
+              const floatY = isDragTarget ? node.y : node.y + Math.cos(animTime * 0.0012 + idx * 0.5) * 1.2;
 
               return (
                 <g
@@ -426,7 +565,7 @@ export function GraphPanel({
                   className={cn(
                     'transition-opacity duration-150',
                     node.filePath
-                      ? dragState?.nodeId === node.id ? 'cursor-grabbing' : 'cursor-grab'
+                      ? isDragTarget ? 'cursor-grabbing' : 'cursor-grab'
                       : 'cursor-default',
                   )}
                   onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
@@ -442,19 +581,20 @@ export function GraphPanel({
                 >
                   {isSelected && (
                     <circle
-                      cx={node.x} cy={node.y} r={radius + 8}
+                      cx={floatX} cy={floatY} r={radius + 8}
                       fill="rgba(59,130,246,0.12)"
                       stroke="rgba(59,130,246,0.3)"
                       strokeWidth={1}
                     />
                   )}
                   <circle
-                    cx={node.x} cy={node.y} r={radius}
+                    cx={floatX} cy={floatY} r={radius}
                     fill={fill} stroke={stroke}
                     strokeWidth={isSelected ? 2.5 : node.dangling ? 1.8 : 1.5}
+                    filter="url(#node-glow)"
                   />
                   <text
-                    x={node.x} y={node.y + radius + 16}
+                    x={floatX} y={floatY + radius + 16}
                     textAnchor="middle"
                     className={cn('text-[12px] font-medium', isSelected ? 'fill-primary' : 'fill-foreground')}
                     fontWeight={isSelected ? 600 : isNeighbor && selection ? 500 : 400}
@@ -470,6 +610,41 @@ export function GraphPanel({
           {preview && (
             <NodePreview preview={preview} onClose={handlePreviewClose} />
           )}
+
+          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-md border border-border bg-background/90 px-1.5 py-1 shadow-sm backdrop-blur-sm">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleZoomOut}
+              disabled={zoom <= MIN_ZOOM}
+              aria-label="Zoom out"
+              title="Zoom out"
+            >
+              <ZoomOut className="size-3.5" />
+            </Button>
+            <span className="min-w-[3rem] text-center text-xs font-medium text-muted-foreground">
+              {Math.round(zoom * 100)}%
+            </span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleZoomIn}
+              disabled={zoom >= MAX_ZOOM}
+              aria-label="Zoom in"
+              title="Zoom in"
+            >
+              <ZoomIn className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleZoomReset}
+              aria-label="Reset zoom"
+              title="Reset zoom"
+            >
+              <RotateCcw className="size-3.5" />
+            </Button>
+          </div>
         </div>
       )}
 

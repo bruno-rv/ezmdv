@@ -8,7 +8,9 @@ import {
   Menu,
   Minimize2,
   Pencil,
+  RefreshCw,
   Save,
+  Upload,
   X,
 } from 'lucide-react';
 import { AutoScrollControls } from '@/components/AutoScrollControls';
@@ -33,6 +35,7 @@ import { useEditMode } from '@/hooks/useEditMode';
 import { useAutoScroll } from '@/hooks/useAutoScroll';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import {
+  createFile,
   fetchFileContent,
   fetchFileMetadata,
   fetchProjectFiles,
@@ -78,6 +81,10 @@ function App() {
     renameProject,
     removeProject,
     removeProjects,
+    uploadToProject,
+    moveFileBetweenProjects,
+    createProjectFolder,
+    mergeProject,
   } = useProjects();
   const {
     tabs,
@@ -111,6 +118,8 @@ function App() {
   const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null);
   const [editorFilePaths, setEditorFilePaths] = useState<string[]>([]);
   const [graphPreview, setGraphPreview] = useState<{ filePath: string; content: string } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
 
   const metaCacheRef = useRef<Map<string, FileMetadata>>(new Map());
   const contentScrollRef = useRef<HTMLDivElement>(null);
@@ -194,6 +203,17 @@ function App() {
       return () => { cancelled = true; };
     },
     [setPaneContent, setPaneLoading],
+  );
+
+  const refreshPaneContent = useCallback(
+    (pane: Pane) => {
+      const tab = pane === 'primary' ? primaryTab : secondaryTab;
+      if (!tab) return;
+      fetchFileContent(tab.projectId, tab.filePath)
+        .then((content) => setPaneContent(pane, content))
+        .catch(() => {});
+    },
+    [primaryTab, secondaryTab, setPaneContent],
   );
 
   const getPaneTab = useCallback(
@@ -359,6 +379,7 @@ function App() {
     setFullscreenPane,
     setGraphPreview: setGraphPreviewNull,
     autoScrollToggle: autoScroll.toggle,
+    refreshPaneContent,
   });
 
   const handleFileClick = useCallback(
@@ -510,6 +531,86 @@ function App() {
     [addProject, loadProjectFiles, loadProjects],
   );
 
+  const handleCreateFile = useCallback(
+    async (projectId: string, filePath: string) => {
+      try {
+        await createFile(projectId, filePath);
+        await loadProjectFiles(projectId);
+        openProjectFile(projectId, filePath);
+      } catch (error) {
+        console.error('Create file failed:', error);
+      }
+    },
+    [loadProjectFiles, openProjectFile],
+  );
+
+  const handleUploadToProject = useCallback(
+    async (projectId: string, files: File[]) => {
+      try {
+        await uploadToProject(projectId, files);
+      } catch (error) {
+        console.error('Upload to project failed:', error);
+      }
+    },
+    [uploadToProject],
+  );
+
+  const handleMoveFile = useCallback(
+    async (destProjectId: string, sourceProjectId: string, sourceFilePath: string, destFilePath: string) => {
+      try {
+        const result = await moveFileBetweenProjects(destProjectId, sourceProjectId, sourceFilePath, destFilePath);
+        if (result.sourceProjectDeleted) {
+          closeProjectTabs(sourceProjectId);
+          if (graphProjectId === sourceProjectId) {
+            setGraphProjectId(null);
+            setGraphData(null);
+          }
+        }
+      } catch (error) {
+        console.error('Move file failed:', error);
+      }
+    },
+    [closeProjectTabs, graphProjectId, moveFileBetweenProjects],
+  );
+
+  const handleMergeProject = useCallback(
+    (destProjectId: string, sourceProjectId: string) => {
+      const source = projects.find((p) => p.id === sourceProjectId);
+      const dest = projects.find((p) => p.id === destProjectId);
+      if (!source || !dest) return;
+      if (
+        !window.confirm(
+          `Merge "${source.name}" into "${dest.name}" as a subfolder?`,
+        )
+      ) {
+        return;
+      }
+      mergeProject(destProjectId, sourceProjectId)
+        .then(() => {
+          closeProjectTabs(sourceProjectId);
+          if (graphProjectId === sourceProjectId) {
+            setGraphProjectId(null);
+            setGraphData(null);
+          }
+        })
+        .catch((error) => {
+          console.error('Merge project failed:', error);
+        });
+    },
+    [closeProjectTabs, graphProjectId, mergeProject, projects],
+  );
+
+  const handleCreateFolder = useCallback(
+    async (projectId: string, folderPath: string) => {
+      try {
+        await createProjectFolder(projectId, folderPath);
+      } catch (error) {
+        console.error('Create folder failed:', error);
+      }
+    },
+    [createProjectFolder],
+  );
+
   const handleTabClose = useCallback(
     (projectId: string, filePath: string) => {
       if (
@@ -623,6 +724,21 @@ function App() {
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
               {tab.filePath}
             </span>
+
+            {!editMode && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  refreshPaneContent(pane);
+                }}
+                aria-label="Refresh from disk"
+                title="Refresh from disk (Ctrl+Shift+R)"
+              >
+                <RefreshCw className="size-4" />
+              </Button>
+            )}
 
             <div
               className="relative"
@@ -828,6 +944,7 @@ function App() {
       metaTooltip,
       paneStates,
       primaryTab,
+      refreshPaneContent,
       saving,
       secondaryTab,
       setEditContent,
@@ -854,7 +971,42 @@ function App() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground transition-colors duration-200">
+    <div
+      className={cn(
+        'relative flex h-screen overflow-hidden bg-background text-foreground transition-colors duration-200',
+        dragOver && 'ring-2 ring-inset ring-primary/50',
+      )}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        if (e.dataTransfer.types.includes('Files')) {
+          dragCounterRef.current++;
+          setDragOver(true);
+        }
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        dragCounterRef.current--;
+        if (dragCounterRef.current <= 0) {
+          dragCounterRef.current = 0;
+          setDragOver(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        dragCounterRef.current = 0;
+        setDragOver(false);
+        const files = Array.from(e.dataTransfer.files).filter((f) =>
+          f.name.toLowerCase().endsWith('.md'),
+        );
+        if (files.length > 0) {
+          handleUploadFiles(files);
+        }
+      }}
+    >
       {showSidebar && (
         <Sidebar
           projects={projects}
@@ -868,12 +1020,17 @@ function App() {
           onBulkDelete={handleBulkDelete}
           onBulkOpen={handleBulkOpen}
           onUploadFiles={handleUploadFiles}
+          onUploadToProject={handleUploadToProject}
+          onMoveFile={handleMoveFile}
+          onMergeProject={handleMergeProject}
+          onCreateFolder={handleCreateFolder}
           autoExpandProjectId={autoExpandProjectId}
           isOpen={sidebarOpen}
           collapsed={sidebarCollapsed}
           onClose={() => setSidebarOpen(false)}
           onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
           onOpenGraph={handleOpenGraph}
+          onCreateFile={handleCreateFile}
           onShowShortcuts={() => setShowShortcuts(true)}
         />
       )}
@@ -971,6 +1128,14 @@ function App() {
           content={graphPreview.content}
           onClose={setGraphPreviewNull}
         />
+      )}
+      {dragOver && (
+        <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 px-12 py-10">
+            <Upload className="size-10 text-primary/70" />
+            <p className="text-sm font-medium text-primary">Drop .md files to upload</p>
+          </div>
+        </div>
       )}
     </div>
   );

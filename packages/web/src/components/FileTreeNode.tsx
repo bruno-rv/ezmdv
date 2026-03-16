@@ -15,6 +15,7 @@ interface FileTreeNodeProps {
   activeTab: Tab | null;
   depth: number;
   onFileClick: (projectId: string, filePath: string) => void;
+  draggable?: boolean;
 }
 
 export function FileTreeNode({
@@ -23,6 +24,7 @@ export function FileTreeNode({
   activeTab,
   depth,
   onFileClick,
+  draggable,
 }: FileTreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -61,6 +63,7 @@ export function FileTreeNode({
                 activeTab={activeTab}
                 depth={depth + 1}
                 onFileClick={onFileClick}
+                draggable={draggable}
               />
             ))}
           </div>
@@ -79,6 +82,14 @@ export function FileTreeNode({
       )}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
       onClick={() => onFileClick(projectId, entry.path)}
+      draggable={draggable}
+      onDragStart={draggable ? (e) => {
+        e.dataTransfer.setData(
+          'application/x-ezmdv-file',
+          JSON.stringify({ projectId, filePath: entry.path, fileName: entry.name }),
+        );
+        e.dataTransfer.effectAllowed = 'move';
+      } : undefined}
     >
       <File className="size-3.5 shrink-0 text-blue-500" />
       <span className="truncate">{entry.name}</span>

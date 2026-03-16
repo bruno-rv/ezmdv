@@ -12,15 +12,20 @@ It is a monorepo with three packages:
 
 - Open a markdown project from the CLI or upload files directly in the browser
 - Browse markdown files in a sidebar tree
+- Create new `.md` files in-app with inline naming
 - Preview rendered markdown with code highlighting, Mermaid diagrams, KaTeX math, footnotes, and collapsible sections
 - Edit markdown in-app with CodeMirror 6 and save changes
 - Obsidian-style `[[wiki-links]]` with autocomplete while editing
 - Open two markdown files side by side for reading
 - Fullscreen a markdown pane
-- Interactive project graph showing markdown link relationships
-- Per-project and global search across all projects
+- Interactive project graph with constellation visuals (glow, gradients, floating animation), smooth drag, link highlighting, and zoom/pan controls
+- Per-project and global search with exact and fuzzy modes (trigram + stemming)
+- Refresh from disk button and keyboard shortcut (`Ctrl/Cmd+Shift+R`)
+- Drag-and-drop `.md` files onto the app to upload
 - Autoscroll (teleprompter mode) with configurable interval and scroll percentage
 - Keyboard shortcuts for common actions
+- Drag-and-drop projects onto each other to merge as subfolders
+- Create subfolders within projects
 - Multi-select projects for bulk delete/open
 - File metadata tooltip (size, line count, dates)
 - Light and dark theme
@@ -114,14 +119,14 @@ Open `http://localhost:5173` — changes hot-reload instantly via Vite HMR.
 
 ## Tests
 
-80 tests across 12 files using Vitest:
+139 tests across 14 files using Vitest:
 
 ```bash
 npm test
 ```
 
-- **Server** (42 tests): state management, path traversal security, markdown graph/search, API routes
-- **Web** (38 tests): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete
+- **Server** (92 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, fuzzy search (trigrams, stemming, scoring)
+- **Web** (47 tests, 8 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom
 
 ## Local Data
 

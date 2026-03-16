@@ -13,9 +13,15 @@ const SHORTCUTS = [
   { key: 'Ctrl/⌘ + ]', description: 'Next tab' },
   { key: 'Ctrl/⌘ + [', description: 'Previous tab' },
   { key: 'Ctrl/⌘ + Shift + A', description: 'Toggle autoscroll' },
+  { key: 'Ctrl/⌘ + Shift + R', description: 'Refresh from disk' },
   { key: 'Esc', description: 'Exit fullscreen' },
   { key: 'Double-click graph node', description: 'Open file' },
   { key: 'Drag graph node', description: 'Reposition' },
+  { key: 'Scroll wheel (graph)', description: 'Zoom in/out' },
+  { key: '+ / =', description: 'Zoom in (graph)' },
+  { key: '-', description: 'Zoom out (graph)' },
+  { key: '0', description: 'Reset zoom (graph)' },
+  { key: 'Shift + Drag (graph)', description: 'Pan view' },
 ];
 
 export function ShortcutsModal({ onClose }: ShortcutsModalProps) {
