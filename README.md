@@ -37,6 +37,16 @@ npm start
 
 This builds everything and opens your browser. Click **Upload** in the sidebar to select your `.md` files and start reading.
 
+### Updating an existing clone
+
+```bash
+git pull
+npm install
+npm run build
+```
+
+Always run `git pull` before `npm install` — build scripts and dependencies may have changed.
+
 ## Requirements
 
 - Node.js (v18+)
