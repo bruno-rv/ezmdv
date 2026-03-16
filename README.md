@@ -12,11 +12,20 @@ It is a monorepo with three packages:
 
 - Open a markdown project from the CLI
 - Browse markdown files in a sidebar tree
-- Preview rendered markdown with code highlighting, Mermaid, footnotes, and collapsible sections
-- Edit markdown in-app and save changes
+- Preview rendered markdown with code highlighting, Mermaid diagrams, KaTeX math, footnotes, and collapsible sections
+- Edit markdown in-app with CodeMirror 6 and save changes
+- Obsidian-style `[[wiki-links]]` with autocomplete while editing
 - Open two markdown files side by side for reading
 - Fullscreen a markdown pane
 - Upload markdown files or folders into local app storage
+- Interactive project graph showing markdown link relationships
+- Per-project and global search across all projects
+- Autoscroll (teleprompter mode) with configurable interval and scroll percentage
+- Keyboard shortcuts for common actions
+- Multi-select projects for bulk delete/open
+- File metadata tooltip (size, line count, dates)
+- Light and dark theme
+- Deleted CLI projects are remembered and not re-added on restart
 
 ## Requirements
 
@@ -84,19 +93,29 @@ npm run dev:web
 
 The Vite app runs with API and WebSocket proxying to the local server on port `3000`.
 
+## Tests
+
+Tests use Vitest — 80 tests across 12 files:
+
+```bash
+npm test
+```
+
+- **Server** (42 tests): state read/write/update, path traversal security, markdown graph/search utilities, API route smoke tests with supertest
+- **Web** (38 tests): wiki-link parsing/rendering, pane workspace, edit mode, autoscroll, graph filtering, wiki-link autocomplete
+
 ## Local Data
 
 ezmdv stores local application data under `~/.ezmdv/`:
 
-- `state.json`: persisted projects, theme, open tabs, and checkbox state
+- `state.json`: persisted projects, theme, open tabs, checkbox state, and dismissed CLI paths
 - `uploads/`: uploaded markdown projects
-- `trash/`: deleted uploaded projects retained temporarily before purge
+- `trash/`: deleted uploaded projects retained temporarily before purge (auto-purged after 30 days)
 
 ## Notes
 
 - Uploaded files stay on your machine.
 - The server only allows localhost origins.
-- There is currently no automated test suite in the repo.
 
 ## License
 
