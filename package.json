@@ -5,7 +5,7 @@
   "description": "Easy Markdown Viewer — browser-based markdown viewer launched from the CLI",
   "scripts": {
     "prebuild": "test -d node_modules/.bin || (echo 'Error: run npm install first' && exit 1)",
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w packages/server && npm run build -w packages/cli -w packages/web",
     "test": "npm run test --workspaces --if-present",
     "dev:server": "cd packages/server && npm run build && node dist/index.js",
     "dev:web": "cd packages/web && npm run dev"
