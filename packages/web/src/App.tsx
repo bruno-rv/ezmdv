@@ -577,7 +577,10 @@ function App() {
     (destProjectId: string, sourceProjectId: string) => {
       const source = projects.find((p) => p.id === sourceProjectId);
       const dest = projects.find((p) => p.id === destProjectId);
-      if (!source || !dest) return;
+      if (!source || !dest) {
+        alert('Could not find one of the projects.');
+        return;
+      }
       if (
         !window.confirm(
           `Merge "${source.name}" into "${dest.name}" as a subfolder?`,
@@ -594,7 +597,7 @@ function App() {
           }
         })
         .catch((error) => {
-          console.error('Merge project failed:', error);
+          alert(error instanceof Error ? error.message : 'Merge failed.');
         });
     },
     [closeProjectTabs, graphProjectId, mergeProject, projects],
@@ -640,6 +643,14 @@ function App() {
     }
     enterSplitView();
   }, [editMode, enterSplitView, isDirty, setEditMode]);
+
+  const handleTabClick = useCallback(
+    (projectId: string, filePath: string) => {
+      setGraphProjectId(null);
+      switchTab(projectId, filePath);
+    },
+    [switchTab],
+  );
 
   const handleOpenGraph = useCallback(async (projectId: string) => {
     setGraphProjectId(projectId);
@@ -984,8 +995,10 @@ function App() {
         }
       }}
       onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }
       }}
       onDragLeave={(e) => {
         e.preventDefault();
@@ -996,14 +1009,16 @@ function App() {
         }
       }}
       onDrop={(e) => {
-        e.preventDefault();
         dragCounterRef.current = 0;
         setDragOver(false);
-        const files = Array.from(e.dataTransfer.files).filter((f) =>
-          f.name.toLowerCase().endsWith('.md'),
-        );
-        if (files.length > 0) {
-          handleUploadFiles(files);
+        if (e.dataTransfer.files.length > 0) {
+          e.preventDefault();
+          const files = Array.from(e.dataTransfer.files).filter((f) =>
+            f.name.toLowerCase().endsWith('.md'),
+          );
+          if (files.length > 0) {
+            handleUploadFiles(files);
+          }
         }
       }}
     >
@@ -1057,7 +1072,7 @@ function App() {
             primaryTab={primaryTab}
             secondaryTab={secondaryTab}
             splitView={splitView}
-            onTabClick={switchTab}
+            onTabClick={handleTabClick}
             onTabClose={handleTabClose}
           />
         )}
