@@ -24,11 +24,11 @@ npm run dev:web     # Vite dev server with HMR, proxies API to :3000 → open :5
 
 For rapid iteration use the dev workflow: `dev:server` + `dev:web` in two terminals.
 
-Tests use Vitest (server + web packages). Server tests cover state, security, markdown graph/search, filesystem, API routes, subfolder extract/merge, and fuzzy search. Web tests cover wiki-links, pane workspace, hooks (edit mode, autoscroll), graph filtering/zoom, wiki-link autocomplete, and search toolbar layout.
+Tests use Vitest (server + web packages). Server tests cover state, security, markdown graph/search, filesystem, API routes, subfolder extract/merge, fuzzy search, and zoom level persistence. Web tests cover wiki-links, pane workspace, hooks (edit mode, autoscroll), graph filtering/zoom, wiki-link autocomplete, and search toolbar layout.
 
 ## Architecture
 
-- **State**: File-based JSON at `~/.ezmdv/state.json` — projects, `openTabs`, theme, checkbox states, `dismissedCliPaths`. Split view, focused pane, fullscreen, and sidebar collapse are client-side only
+- **State**: File-based JSON at `~/.ezmdv/state.json` — projects, `openTabs`, theme, checkbox states, `dismissedCliPaths`, `keyboardShortcuts`, `zoomLevels`. Split view, focused pane, fullscreen, and sidebar collapse are client-side only
 - **Uploads**: Stored in `~/.ezmdv/uploads/<project>/`
 - **Trash**: Deleted upload projects moved to `~/.ezmdv/trash/<id>/` (`meta.json` + `files/`). Purged after 30 days on server startup
 - **WebSocket**: Chokidar watches project dirs, broadcasts `file-changed` events
@@ -55,7 +55,7 @@ Tests use Vitest (server + web packages). Server tests cover state, security, ma
 - **Lazy loading**: `MarkdownEditor` (CodeMirror) is `React.lazy()` — don't eagerly import it
 - **Edit mode**: Single-pane only. WebSocket content refresh suppressed while editing (via `editModeRef`). `handleSave(exitAfter?)` unifies save and save-and-exit
 - **Wiki-links**: Obsidian-style `[[Note]]` / `[[Note#Heading]]` supported in rendering and graph, alongside relative `.md` links
-- **Graph**: Force-directed layout (140 iterations). Single-click selects node with neighbor highlighting; double-click opens file. Hover 5s for full-screen preview modal. Zoom/pan via scroll wheel, keyboard (`+`/`=`/`-`/`0`), and buttons. Zoom utilities in `packages/web/src/lib/graphZoom.ts`. Graph button uses `Waypoints` icon. Drag uses direct DOM manipulation during mousemove, commits to React state on mouseup
+- **Graph**: Force-directed layout (140 iterations). Single-click selects node with neighbor highlighting; double-click opens file. Hover 5s for `NodePreview` modal (minimize/maximize/restore + per-file zoom controls). Double-click node opens `GraphPreviewModal` (also has per-file zoom). Zoom/pan via scroll wheel, keyboard (`+`/`=`/`-`/`0`), and buttons. Zoom utilities in `packages/web/src/lib/graphZoom.ts`. Graph button uses `Waypoints` icon. Drag uses direct DOM manipulation during mousemove, commits to React state on mouseup
 - **Graph search**: `filterGraphBySearch()` in `packages/web/src/lib/graphFilter.ts` (pure); debounced 200ms in GraphPanel.tsx; node count display `X / Y nodes`
 - **Security**: Path traversal via `isPathWithinRoot()`. Upload deletion guarded to `~/.ezmdv/uploads/` only. Express 5 normalizes `../` in URLs — path traversal tests accept both 403 and 404
 - **File uploads**: Multi-file picker (`accept=".md"`, `multiple`) + drag-and-drop. Always use `File[]` not `FileList` — `FileList` empties when `input.value` is reset. Convert with `Array.from()` before any async work
@@ -73,5 +73,6 @@ Tests use Vitest (server + web packages). Server tests cover state, security, ma
 - **Keyboard shortcuts**: `Ctrl/Cmd+S` save, `+E` toggle edit, `+Shift+A` autoscroll, `+Shift+R` refresh, `+W` close tab, `+[/]` switch tabs, `Esc` exit fullscreen, `+`/`=`/`-`/`0` graph zoom
 - **Wiki-link autocomplete**: `wikiLinkSource()` in `packages/web/src/lib/wikiLinkCompletion.ts`; triggered on `[[`; `filePaths` prop on `MarkdownEditor`, populated when `editMode` is true
 - **Shortcuts modal**: `ShortcutsModal.tsx`; `Keyboard` icon in sidebar header
+- **Per-file zoom**: `zoomLevels: Record<"projectId:filePath", number>` in `AppState`. `App.tsx` owns state and exposes `getZoom`/`handleZoomChange`/`handleZoomReset`. Zoom applied as `fontSize: "${zoom*100}%"` on `MarkdownView`'s prose container. Controls in pane toolbar (view mode only), `NodePreview` header, and `GraphPreviewModal` header. Default (100%) writes no entry; double-clicking `%` badge resets. Server uses plain replacement (not additive merge) for `zoomLevels` — client always sends the full map
 - **Extracted components**: `FileTreeNode`, `ExpandedProjectContent`, `GraphPreviewModal`
 - **File metadata tooltip**: `GET /api/projects/:id/file-meta?path=`; `FileMetaTooltip.tsx`; lazy-fetched with `Map` cache on `Info` button hover

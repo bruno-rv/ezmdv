@@ -137,20 +137,20 @@ Open `http://localhost:5173` — changes hot-reload instantly via Vite HMR.
 
 ## Tests
 
-162 tests across 16 files using Vitest:
+165 tests across 16 files using Vitest:
 
 ```bash
 npm test
 ```
 
-- **Server** (97 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, subfolder extraction, subfolder merge, fuzzy search (trigrams, stemming, scoring)
+- **Server** (100 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, subfolder extraction, subfolder merge, fuzzy search (trigrams, stemming, scoring), zoom level persistence
 - **Web** (65 tests, 10 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom, ExpandedProjectContent component, GlobalSearch component
 
 ## Local Data
 
 ezmdv stores application data under `~/.ezmdv/`:
 
-- `state.json`: projects, theme, open tabs, checkbox state, dismissed CLI paths, keyboard shortcut overrides
+- `state.json`: projects, theme, open tabs, checkbox state, dismissed CLI paths, keyboard shortcut overrides, per-file zoom levels
 - `uploads/`: uploaded markdown projects
 - `trash/`: soft-deleted uploads (auto-purged after 30 days)
 
