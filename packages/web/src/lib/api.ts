@@ -67,6 +67,7 @@ export interface AppState {
   openTabs: Tab[];
   checkboxStates: Record<string, Record<string, boolean>>;
   keyboardShortcuts?: Record<string, string>;
+  zoomLevels?: Record<string, number>;
 }
 
 const BASE_URL = window.location.origin;
