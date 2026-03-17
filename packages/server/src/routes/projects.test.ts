@@ -726,3 +726,35 @@ describe('DELETE /api/projects/:id', () => {
     expect(state.dismissedCliPaths).toContain(projectDir);
   });
 });
+
+describe('GET /api/projects/:id/backlinks', () => {
+  it('returns 400 when path query is missing', async () => {
+    const res = await request(app).get(`/api/projects/${projectId}/backlinks`);
+    expect(res.status).toBe(400);
+  });
+
+  it('returns backlinks for a file that is linked to', async () => {
+    const res = await request(app)
+      .get(`/api/projects/${projectId}/backlinks`)
+      .query({ path: 'readme.md' });
+    expect(res.status).toBe(200);
+    expect(res.body.backlinks).toBeDefined();
+    expect(res.body.backlinks.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.backlinks[0].sourceFile).toBe('docs/guide.md');
+  });
+
+  it('returns empty backlinks for a file with no incoming links', async () => {
+    const res = await request(app)
+      .get(`/api/projects/${projectId}/backlinks`)
+      .query({ path: 'docs/guide.md' });
+    expect(res.status).toBe(200);
+    expect(res.body.backlinks).toHaveLength(0);
+  });
+
+  it('returns 404 for a non-existent project', async () => {
+    const res = await request(app)
+      .get('/api/projects/nonexistent/backlinks')
+      .query({ path: 'readme.md' });
+    expect(res.status).toBe(404);
+  });
+});

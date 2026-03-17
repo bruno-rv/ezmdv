@@ -108,6 +108,37 @@ export function createProjectRoutes(statePath?: string): Router {
 
   const upload = multer({ storage });
 
+  const ALLOWED_IMAGE_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+  ]);
+
+  const imageStorage = multer.diskStorage({
+    destination(_req, _file, cb) {
+      cb(null, os.tmpdir());
+    },
+    filename(_req, file, cb) {
+      const ext = path.extname(file.originalname);
+      const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_\-. ]/g, '_');
+      cb(null, `${base}-${Date.now()}${ext}`);
+    },
+  });
+
+  const imageUpload = multer({
+    storage: imageStorage,
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter(_req, file, cb) {
+      if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image files (png, jpg, jpeg, gif, webp, svg) are allowed'));
+      }
+    },
+  });
+
   // GET /api/projects — list all projects
   router.get('/', (_req: Request, res: Response) => {
     const state = readState(statePath);
@@ -334,6 +365,52 @@ export function createProjectRoutes(statePath?: string): Router {
     res.json(buildProjectGraphFromFiles(files));
   });
 
+  // GET /api/projects/:id/backlinks
+  router.get('/:id/backlinks', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
+
+    const filePath = typeof req.query.path === 'string' ? req.query.path : '';
+    if (!filePath) {
+      res.status(400).json({ error: 'path query parameter is required' });
+      return;
+    }
+
+    const files = collectMarkdownFiles(project.path);
+    const graph = buildProjectGraphFromFiles(files);
+
+    const normalizedTarget = filePath.replace(/\\/g, '/').replace(/^\.?\//, '');
+
+    const incomingEdges = graph.edges.filter((edge) => {
+      const target = edge.target.replace(/\\/g, '/').replace(/^\.?\//, '');
+      return target === normalizedTarget;
+    });
+
+    const fileContentMap = new Map(files.map((f) => [f.path, f.content]));
+
+    const backlinks = incomingEdges.map((edge) => {
+      const sourceContent = fileContentMap.get(edge.source) ?? '';
+      const rawTarget = edge.rawTarget;
+      const idx = sourceContent.indexOf(rawTarget);
+      const contextStart = Math.max(0, idx - 50);
+      const contextEnd = Math.min(sourceContent.length, idx + rawTarget.length + 80);
+      const context = idx >= 0
+        ? sourceContent.slice(contextStart, contextEnd).replace(/\s+/g, ' ').trim()
+        : '';
+
+      return {
+        sourceFile: edge.source,
+        linkText: rawTarget,
+        context,
+      };
+    });
+
+    const uniqueBacklinks = Array.from(
+      new Map(backlinks.map((bl) => [`${bl.sourceFile}:${bl.linkText}`, bl])).values(),
+    );
+
+    res.json({ backlinks: uniqueBacklinks });
+  });
+
   // GET /api/projects/:id/search
   router.get('/:id/search', withProject, (req: Request, res: Response) => {
     const { project } = req as ProjectRequest;
@@ -409,7 +486,7 @@ export function createProjectRoutes(statePath?: string): Router {
   // POST /api/projects/:id/create-file
   router.post('/:id/create-file', withProject, (req: Request, res: Response) => {
     const { project } = req as ProjectRequest;
-    const { path: filePath } = req.body as { path: string };
+    const { path: filePath, content: bodyContent } = req.body as { path: string; content?: string };
 
     if (!filePath || typeof filePath !== 'string') {
       res.status(400).json({ error: 'path is required' });
@@ -434,7 +511,8 @@ export function createProjectRoutes(statePath?: string): Router {
 
     try {
       fs.mkdirSync(path.dirname(fullPath), { recursive: true });
-      fs.writeFileSync(fullPath, '', 'utf-8');
+      const initialContent = typeof bodyContent === 'string' ? bodyContent : '';
+      fs.writeFileSync(fullPath, initialContent, 'utf-8');
       res.status(201).json({ created: filePath });
     } catch {
       res.status(500).json({ error: 'Failed to create file' });
@@ -846,6 +924,67 @@ export function createProjectRoutes(statePath?: string): Router {
     }
 
     res.json({ moved: true, destFilePath, sourceProjectDeleted });
+  });
+
+  // POST /api/projects/:id/upload-image
+  router.post(
+    '/:id/upload-image',
+    withProject,
+    imageUpload.single('image'),
+    (req: Request, res: Response) => {
+      const { project } = req as ProjectRequest;
+      const file = req.file;
+
+      if (!file) {
+        res.status(400).json({ error: 'No image file uploaded' });
+        return;
+      }
+
+      const imagesDir = path.join(project.path, 'images');
+      fs.mkdirSync(imagesDir, { recursive: true });
+
+      const destPath = path.join(imagesDir, file.filename);
+      if (!isPathWithinRoot(destPath, project.path)) {
+        fs.unlinkSync(file.path);
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+
+      try {
+        fs.renameSync(file.path, destPath);
+        res.json({ path: `images/${file.filename}` });
+      } catch {
+        try { fs.unlinkSync(file.path); } catch { /* best effort */ }
+        res.status(500).json({ error: 'Failed to save image' });
+      }
+    },
+  );
+
+  // GET /api/projects/:id/images/* — serve uploaded images
+  router.get('/:id/images/*filePath', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
+
+    const filePath = resolveWildcardPath(req);
+    if (!filePath) {
+      res.status(400).json({ error: 'File path is required' });
+      return;
+    }
+
+    const fullPath = path.join(project.path, 'images', filePath);
+    if (!isPathWithinRoot(fullPath, project.path)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    try {
+      if (!fs.existsSync(fullPath)) {
+        res.status(404).json({ error: 'Image not found' });
+        return;
+      }
+      res.sendFile(fullPath);
+    } catch {
+      res.status(404).json({ error: 'Image not found' });
+    }
   });
 
   return router;

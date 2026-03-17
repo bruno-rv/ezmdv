@@ -24,7 +24,7 @@ npm run dev:web     # Vite dev server with HMR, proxies API to :3000 → open :5
 
 For rapid iteration use the dev workflow: `dev:server` + `dev:web` in two terminals.
 
-Tests use Vitest (server + web packages). Server tests cover state, security, markdown graph/search, filesystem, API routes, subfolder extract/merge, fuzzy search, and zoom level persistence. Web tests cover wiki-links, pane workspace, hooks (edit mode, autoscroll), graph filtering/zoom, wiki-link autocomplete, and search toolbar layout.
+Tests use Vitest (server + web packages). Server tests cover state, security, markdown graph/search, filesystem, API routes, subfolder extract/merge, fuzzy search, zoom level persistence, and backlinks. Web tests cover wiki-links, pane workspace, hooks (edit mode, autoscroll), graph filtering/zoom, wiki-link autocomplete, search toolbar layout, command palette, backlinks panel, table of contents, and templates.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ Tests use Vitest (server + web packages). Server tests cover state, security, ma
 - **Trash**: Deleted upload projects moved to `~/.ezmdv/trash/<id>/` (`meta.json` + `files/`). Purged after 30 days on server startup
 - **WebSocket**: Chokidar watches project dirs, broadcasts `file-changed` events
 - **CORS**: Restricted to localhost origins only
-- **API routes**: `/api/projects` (CRUD + rename + file read/write + create-file + create-folder + merge-project + extract-subfolder + merge-subfolder + upload + graph + per-project search + global search), `/api/state` (GET/PATCH)
+- **API routes**: `/api/projects` (CRUD + rename + file read/write + create-file + create-folder + merge-project + extract-subfolder + merge-subfolder + upload + upload-image + images + backlinks + graph + per-project search + global search), `/api/state` (GET/PATCH)
 - **Shared constants**: `IGNORED_DIRS` in `packages/server/src/constants.ts`
 - **Security module**: `packages/server/src/security.ts` — `isPathWithinRoot()` for path traversal, `projectLookup()` Express middleware for DRY project resolution
 
@@ -70,9 +70,15 @@ Tests use Vitest (server + web packages). Server tests cover state, security, ma
 - **Global search**: `GET /api/projects/search?q=`; `GlobalSearch` component in sidebar, debounced 250ms, dropdown with project/file/count/preview
 - **Fuzzy search**: `fuzzySearch.ts` — trigram + stemming + multi-signal scoring (exact > filename > stemmed tokens > trigram). Activated via `mode=fuzzy`. Toggle (`~`/`Aa`) in both search UIs
 - **Refresh from disk**: `RefreshCw` in pane toolbar (view mode only); `Ctrl/Cmd+Shift+R`
-- **Keyboard shortcuts**: `Ctrl/Cmd+S` save, `+E` toggle edit, `+Shift+A` autoscroll, `+Shift+R` refresh, `+W` close tab, `+[/]` switch tabs, `Esc` exit fullscreen, `+`/`=`/`-`/`0` graph zoom
+- **Keyboard shortcuts**: `Ctrl/Cmd+S` save, `+E` toggle edit, `+Shift+A` autoscroll, `+Shift+R` refresh, `+Shift+T` toggle TOC, `+K` command palette, `+W` close tab, `+[/]` switch tabs, `Esc` exit fullscreen, `+`/`=`/`-`/`0` graph zoom
 - **Wiki-link autocomplete**: `wikiLinkSource()` in `packages/web/src/lib/wikiLinkCompletion.ts`; triggered on `[[`; `filePaths` prop on `MarkdownEditor`, populated when `editMode` is true
 - **Shortcuts modal**: `ShortcutsModal.tsx`; `Keyboard` icon in sidebar header
 - **Per-file zoom**: `zoomLevels: Record<"projectId:filePath", number>` in `AppState`. `App.tsx` owns state and exposes `getZoom`/`handleZoomChange`/`handleZoomReset`. Zoom applied as `fontSize: "${zoom*100}%"` on `MarkdownView`'s prose container. Controls in pane toolbar (view mode only), `NodePreview` header, and `GraphPreviewModal` header. Default (100%) writes no entry; double-clicking `%` badge resets. Server uses plain replacement (not additive merge) for `zoomLevels` — client always sends the full map
+- **Command palette**: `Ctrl/Cmd+K` opens `CommandPalette.tsx`. Fuzzy searches open tabs, all files across projects, and actions (prefix `>`). Keyboard navigation (arrows/enter/escape). `useCommandPaletteActions` hook provides action list (theme toggle, edit mode, split view, shortcuts)
+- **Table of contents**: `List` icon in pane toolbar (view mode only); `Ctrl/Cmd+Shift+T`. `TableOfContents.tsx` renders clickable heading outline extracted from rendered markdown via `onHeadingsExtracted` callback. `IntersectionObserver` in `App.tsx` tracks active heading for scroll sync. 250px right-side panel
+- **Backlinks panel**: `Link2` icon in pane toolbar (view mode only). `GET /api/projects/:id/backlinks?path=` returns incoming links with context snippets by leveraging the graph. `BacklinksPanel.tsx` shows source files with click-to-navigate. Shared right-side panel with TOC
+- **Markdown templates**: `TemplatePicker.tsx` dropdown shown during file creation in `ExpandedProjectContent`. 8 built-in templates (blank, meeting notes, README, journal, project plan, bug report, weekly review, checklist) defined in `packages/web/src/lib/templates.ts`. `formatTemplate()` substitutes `{{date}}` and `{{filename}}` variables. Template content passed to `POST /api/projects/:id/create-file` body
+- **Find & replace**: `@codemirror/search` extension with `search({ top: true })` in `MarkdownEditor.tsx`. `Ctrl/Cmd+F` find, `Ctrl/Cmd+H` find & replace (built-in CodeMirror behavior)
+- **Image paste & embed**: Paste/drop image handlers in `MarkdownEditor.tsx` via `EditorView.domEventHandlers`. Clipboard images extracted from `clipboardData.items`, uploaded via `POST /api/projects/:id/upload-image` (multer, 10MB limit, stored in `<project>/images/`). Inserts `![](path)` at cursor, shows placeholder during upload. Images served via `GET /api/projects/:id/images/*`. `MarkdownView` resolves relative image URLs using `getImageUrl()`
 - **Extracted components**: `FileTreeNode`, `ExpandedProjectContent`, `GraphPreviewModal`
 - **File metadata tooltip**: `GET /api/projects/:id/file-meta?path=`; `FileMetaTooltip.tsx`; lazy-fetched with `Map` cache on `Info` button hover

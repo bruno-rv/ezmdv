@@ -123,6 +123,22 @@ export async function fetchProjectGraph(
   return request<ProjectGraph>(`/api/projects/${projectId}/graph`);
 }
 
+export interface Backlink {
+  sourceFile: string;
+  linkText: string;
+  context: string;
+}
+
+export async function fetchBacklinks(
+  projectId: string,
+  filePath: string,
+): Promise<Backlink[]> {
+  const res = await request<{ backlinks: Backlink[] }>(
+    `/api/projects/${projectId}/backlinks?path=${encodeURIComponent(filePath)}`,
+  );
+  return res.backlinks;
+}
+
 export async function searchProjectContent(
   projectId: string,
   query: string,
@@ -193,10 +209,11 @@ export async function deleteProject(
 export async function createFile(
   projectId: string,
   filePath: string,
+  content?: string,
 ): Promise<void> {
   await request(`/api/projects/${projectId}/create-file`, {
     method: 'POST',
-    body: JSON.stringify({ path: filePath }),
+    body: JSON.stringify({ path: filePath, ...(content !== undefined && { content }) }),
   });
 }
 
@@ -234,6 +251,31 @@ export async function uploadFiles(
     const body = await res.text();
     throw new Error(`Upload error ${res.status}: ${body}`);
   }
+}
+
+export async function uploadImage(
+  projectId: string,
+  file: File,
+): Promise<{ path: string }> {
+  const formData = new FormData();
+  formData.append('image', file);
+  const res = await fetch(
+    `${BASE_URL}/api/projects/${projectId}/upload-image`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Upload error ${res.status}: ${body}`);
+  }
+  return res.json() as Promise<{ path: string }>;
+}
+
+export function getImageUrl(projectId: string, imagePath: string): string {
+  const encoded = imagePath.split('/').map(encodeURIComponent).join('/');
+  return `${BASE_URL}/api/projects/${projectId}/images/${encoded}`;
 }
 
 export async function fetchFileMetadata(

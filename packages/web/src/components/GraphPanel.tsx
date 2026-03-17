@@ -616,6 +616,7 @@ export function GraphPanel({
           {preview && (
             <NodePreview
               preview={preview}
+              projectId={projectId}
               zoom={getZoom(projectId, preview.filePath)}
               onZoomIn={() => onZoomChange(projectId, preview.filePath, +0.1)}
               onZoomOut={() => onZoomChange(projectId, preview.filePath, -0.1)}
@@ -675,12 +676,14 @@ type ModalState = 'normal' | 'minimized' | 'maximized';
 function NodePreview({
   preview,
   zoom,
+  projectId,
   onZoomIn,
   onZoomOut,
   onZoomReset,
   onClose,
 }: {
   preview: PreviewState;
+  projectId: string;
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -762,6 +765,7 @@ function NodePreview({
                 <MarkdownView
                   content={preview.content}
                   zoom={zoom}
+                  projectId={projectId}
                   onLinkClick={noop}
                 />
               ) : null}

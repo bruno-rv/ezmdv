@@ -25,6 +25,7 @@ interface UseKeyboardShortcutsOptions {
   setGraphPreview: (v: null) => void;
   autoScrollToggle: () => void;
   refreshPaneContent: (pane: 'primary' | 'secondary') => void;
+  toggleToc: () => void;
 }
 
 export function useKeyboardShortcuts({
@@ -49,6 +50,7 @@ export function useKeyboardShortcuts({
   setGraphPreview,
   autoScrollToggle,
   refreshPaneContent,
+  toggleToc,
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
     const bindings = getEffectiveBindings(keyboardShortcuts);
@@ -115,6 +117,10 @@ export function useKeyboardShortcuts({
           e.preventDefault();
           if (!editMode) refreshPaneContent('primary');
           break;
+        case 'toggleToc':
+          e.preventDefault();
+          if (!editMode && !splitView) toggleToc();
+          break;
         case 'closeTab':
           e.preventDefault();
           if (activeTab) {
@@ -166,5 +172,6 @@ export function useKeyboardShortcuts({
     splitView,
     switchToNextTab,
     switchToPrevTab,
+    toggleToc,
   ]);
 }

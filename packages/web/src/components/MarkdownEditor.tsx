@@ -4,16 +4,45 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
+import { search } from '@codemirror/search';
 import { wikiLinkSource } from '@/lib/wikiLinkCompletion';
+import { uploadImage } from '@/lib/api';
 
 interface MarkdownEditorProps {
   content: string;
   theme: 'light' | 'dark';
   onChange: (value: string) => void;
   filePaths?: string[];
+  projectId?: string;
 }
 
-export function MarkdownEditor({ content, theme, onChange, filePaths }: MarkdownEditorProps) {
+function insertImageFromFile(view: EditorView, file: File, projectId: string) {
+  const placeholder = `![Uploading ${file.name}...](...)`;
+  const from = view.state.selection.main.head;
+  view.dispatch({ changes: { from, insert: placeholder } });
+
+  uploadImage(projectId, file)
+    .then(({ path }) => {
+      const doc = view.state.doc.toString();
+      const placeholderIdx = doc.indexOf(placeholder);
+      if (placeholderIdx === -1) return;
+      const replacement = `![${file.name}](${path})`;
+      view.dispatch({
+        changes: { from: placeholderIdx, to: placeholderIdx + placeholder.length, insert: replacement },
+      });
+    })
+    .catch(() => {
+      const doc = view.state.doc.toString();
+      const placeholderIdx = doc.indexOf(placeholder);
+      if (placeholderIdx === -1) return;
+      const replacement = `![Upload failed: ${file.name}]()`;
+      view.dispatch({
+        changes: { from: placeholderIdx, to: placeholderIdx + placeholder.length, insert: replacement },
+      });
+    });
+}
+
+export function MarkdownEditor({ content, theme, onChange, filePaths, projectId }: MarkdownEditorProps) {
   const handleChange = useCallback(
     (value: string) => {
       onChange(value);
@@ -26,8 +55,40 @@ export function MarkdownEditor({ content, theme, onChange, filePaths }: Markdown
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       EditorView.lineWrapping,
       autocompletion({ override: [wikiLinkSource(filePaths ?? [])], closeOnBlur: true }),
+      search({ top: true }),
+      ...(projectId
+        ? [
+            EditorView.domEventHandlers({
+              paste(event: ClipboardEvent, view: EditorView) {
+                const items = Array.from(event.clipboardData?.items ?? []);
+                const imageItem = items.find((item) => item.type.startsWith('image/'));
+                if (!imageItem) return false;
+
+                event.preventDefault();
+                const blob = imageItem.getAsFile();
+                if (!blob) return true;
+
+                const ext = blob.type.split('/')[1]?.replace('svg+xml', 'svg') ?? 'png';
+                const file = new File([blob], `pasted-image.${ext}`, { type: blob.type });
+                insertImageFromFile(view, file, projectId);
+                return true;
+              },
+              drop(event: DragEvent, view: EditorView) {
+                const files = Array.from(event.dataTransfer?.files ?? []);
+                const imageFiles = files.filter((f) => f.type.startsWith('image/'));
+                if (imageFiles.length === 0) return false;
+
+                event.preventDefault();
+                for (const file of imageFiles) {
+                  insertImageFromFile(view, file, projectId);
+                }
+                return true;
+              },
+            }),
+          ]
+        : []),
     ],
-    [filePaths],
+    [filePaths, projectId],
   );
 
   return (
@@ -44,6 +105,7 @@ export function MarkdownEditor({ content, theme, onChange, filePaths }: Markdown
         foldGutter: true,
         bracketMatching: true,
         indentOnInput: true,
+        searchKeymap: false,
       }}
     />
   );

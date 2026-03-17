@@ -8,6 +8,7 @@ interface GraphPreviewModalProps {
   filePath: string;
   content: string;
   zoom: number;
+  projectId?: string;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
@@ -18,6 +19,7 @@ export function GraphPreviewModal({
   filePath,
   content,
   zoom,
+  projectId,
   onZoomIn,
   onZoomOut,
   onZoomReset,
@@ -71,6 +73,7 @@ export function GraphPreviewModal({
           <MarkdownView
             content={content}
             zoom={zoom}
+            projectId={projectId}
             onLinkClick={noop}
           />
         </div>
