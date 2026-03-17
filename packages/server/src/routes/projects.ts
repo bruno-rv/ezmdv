@@ -77,6 +77,22 @@ function resolveWildcardPath(req: Request): string | null {
   return filePath || null;
 }
 
+function copyDirRecursive(src: string, dest: string, destRoot: string): void {
+  fs.mkdirSync(dest, { recursive: true });
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (!isPathWithinRoot(destPath, destRoot)) continue;
+    if (entry.isDirectory()) {
+      if (IGNORED_DIRS.has(entry.name)) continue;
+      copyDirRecursive(srcPath, destPath, destRoot);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 export function createProjectRoutes(statePath?: string): Router {
   const router = Router();
   const withProject = projectLookup(statePath);
@@ -482,22 +498,6 @@ export function createProjectRoutes(statePath?: string): Router {
     if (fs.existsSync(destSubfolder)) {
       res.status(409).json({ error: `Subfolder "${sourceName}" already exists in destination` });
       return;
-    }
-
-    function copyDirRecursive(src: string, dest: string, destRoot: string): void {
-      fs.mkdirSync(dest, { recursive: true });
-      const entries = fs.readdirSync(src, { withFileTypes: true });
-      for (const entry of entries) {
-        const srcPath = path.join(src, entry.name);
-        const destPath = path.join(dest, entry.name);
-        if (!isPathWithinRoot(destPath, destRoot)) continue;
-        if (entry.isDirectory()) {
-          if (IGNORED_DIRS.has(entry.name)) continue;
-          copyDirRecursive(srcPath, destPath, destRoot);
-        } else {
-          fs.copyFileSync(srcPath, destPath);
-        }
-      }
     }
 
     try {
