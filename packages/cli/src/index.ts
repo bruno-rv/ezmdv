@@ -53,10 +53,13 @@ program
       const url = `http://localhost:${actualPort}`;
 
       // 5. Register project in state
+      const repoRoot = path.resolve(import.meta.dirname, '../../..');
       const state = readState();
       const existing = state.projects.find((p) => p.path === target.path);
 
-      if (existing) {
+      if (path.resolve(target.path) === repoRoot) {
+        console.warn('Skipping project registration: target is the ezmdv installation directory');
+      } else if (existing) {
         // Update lastOpened
         const updatedProjects = state.projects.map((p) =>
           p.path === target.path
