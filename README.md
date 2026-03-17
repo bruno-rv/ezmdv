@@ -33,6 +33,7 @@ It is a monorepo with three packages:
 - Drag-and-drop `.md` files onto the app to upload
 - Autoscroll (teleprompter mode) with configurable interval and scroll percentage
 - Customizable keyboard shortcuts — remap any action from the shortcuts modal and changes persist across sessions
+- Per-file zoom (50–200%) in all reading views — zoom level remembered per file across sessions
 - Drag-and-drop projects onto each other to merge as subfolders (no confirmation dialog)
 - Drag a **subfolder** from the file tree onto another project header to merge it into that project
 - Drag a **subfolder** from the file tree to the drop zone below the project list to extract it as a new standalone project
