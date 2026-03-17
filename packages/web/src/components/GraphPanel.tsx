@@ -16,9 +16,9 @@ interface GraphPanelProps {
   openFilePaths: Set<string>;
   onClose: () => void;
   onOpenFile: (filePath: string) => void;
-  getZoom?: (projectId: string, filePath: string) => number;
-  onZoomChange?: (projectId: string, filePath: string, delta: number) => void;
-  onZoomReset?: (projectId: string, filePath: string) => void;
+  getZoom: (projectId: string, filePath: string) => number;
+  onZoomChange: (projectId: string, filePath: string, delta: number) => void;
+  onZoomReset: (projectId: string, filePath: string) => void;
 }
 
 interface PositionedNode extends GraphNode {
@@ -145,6 +145,9 @@ export function GraphPanel({
   openFilePaths,
   onClose,
   onOpenFile,
+  getZoom,
+  onZoomChange,
+  onZoomReset: onZoomResetProp,
 }: GraphPanelProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const isDragging = useRef(false);
@@ -611,7 +614,14 @@ export function GraphPanel({
 
           {/* Hover preview modal */}
           {preview && (
-            <NodePreview preview={preview} onClose={handlePreviewClose} />
+            <NodePreview
+              preview={preview}
+              zoom={getZoom(projectId, preview.filePath)}
+              onZoomIn={() => onZoomChange(projectId, preview.filePath, +0.1)}
+              onZoomOut={() => onZoomChange(projectId, preview.filePath, -0.1)}
+              onZoomReset={() => onZoomResetProp(projectId, preview.filePath)}
+              onClose={handlePreviewClose}
+            />
           )}
 
           <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-md border border-border bg-background/90 px-1.5 py-1 shadow-sm backdrop-blur-sm">
@@ -662,7 +672,21 @@ export function GraphPanel({
 
 type ModalState = 'normal' | 'minimized' | 'maximized';
 
-function NodePreview({ preview, onClose }: { preview: PreviewState; onClose: () => void }) {
+function NodePreview({
+  preview,
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
+  onClose,
+}: {
+  preview: PreviewState;
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
+  onClose: () => void;
+}) {
   const [modalState, setModalState] = useState<ModalState>('normal');
 
   useEffect(() => {
@@ -693,32 +717,40 @@ function NodePreview({ preview, onClose }: { preview: PreviewState; onClose: () 
           <div className={cardClass} onClick={(e) => e.stopPropagation()}>
             <div className="flex shrink-0 items-center justify-between border-b px-4 py-2">
               <span className="truncate text-sm font-medium">{preview.label}</span>
-              <div className="flex gap-1">
+              <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  onClick={() => setModalState('minimized')}
-                  aria-label="Minimize preview"
-                  title="Minimize"
+                  onClick={onZoomOut}
+                  aria-label="Zoom out"
+                  title="Zoom out"
                 >
+                  <ZoomOut className="size-4" />
+                </Button>
+                <button
+                  className="min-w-[3rem] text-center text-xs text-muted-foreground tabular-nums select-none"
+                  onDoubleClick={onZoomReset}
+                  title="Double-click to reset zoom"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={onZoomIn}
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="size-4" />
+                </Button>
+                <div className="mx-1 h-4 w-px bg-border" />
+                <Button variant="ghost" size="icon-sm" onClick={() => setModalState('minimized')} aria-label="Minimize preview" title="Minimize">
                   <Minus className="size-4" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setModalState(modalState === 'maximized' ? 'normal' : 'maximized')}
-                  aria-label={modalState === 'maximized' ? 'Restore preview' : 'Maximize preview'}
-                  title={modalState === 'maximized' ? 'Restore' : 'Maximize'}
-                >
+                <Button variant="ghost" size="icon-sm" onClick={() => setModalState(modalState === 'maximized' ? 'normal' : 'maximized')} aria-label={modalState === 'maximized' ? 'Restore preview' : 'Maximize preview'} title={modalState === 'maximized' ? 'Restore' : 'Maximize'}>
                   {modalState === 'maximized' ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={onClose}
-                  aria-label="Close preview"
-                  title="Close"
-                >
+                <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close preview" title="Close">
                   <X className="size-4" />
                 </Button>
               </div>
@@ -729,6 +761,7 @@ function NodePreview({ preview, onClose }: { preview: PreviewState; onClose: () 
               ) : preview.content !== null ? (
                 <MarkdownView
                   content={preview.content}
+                  zoom={zoom}
                   onLinkClick={noop}
                 />
               ) : null}
