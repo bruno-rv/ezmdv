@@ -285,6 +285,33 @@ export async function mergeProjectInto(
   );
 }
 
+export async function extractSubfolder(
+  projectId: string,
+  subfolderPath: string,
+): Promise<{ project: Project }> {
+  return request<{ project: Project }>(
+    `/api/projects/${projectId}/extract-subfolder`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ subfolderPath }),
+    },
+  );
+}
+
+export async function mergeSubfolderInto(
+  destProjectId: string,
+  sourceProjectId: string,
+  subfolderPath: string,
+): Promise<MergeProjectResponse> {
+  return request<MergeProjectResponse>(
+    `/api/projects/${destProjectId}/merge-subfolder`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ sourceProjectId, subfolderPath }),
+    },
+  );
+}
+
 export async function fetchState(): Promise<AppState> {
   return request<AppState>('/api/state');
 }
