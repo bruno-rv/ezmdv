@@ -38,6 +38,8 @@ interface SidebarProps {
   onUploadToProject?: (projectId: string, files: File[]) => void;
   onMoveFile?: (destProjectId: string, sourceProjectId: string, sourceFilePath: string, destFilePath: string) => Promise<void>;
   onMergeProject?: (destProjectId: string, sourceProjectId: string) => void;
+  onMergeSubfolder?: (destProjectId: string, sourceProjectId: string, folderPath: string) => void;
+  onExtractSubfolder?: (sourceProjectId: string, folderPath: string) => void;
   onCreateFolder?: (projectId: string, folderPath: string) => void;
   autoExpandProjectId: string | null;
   isOpen: boolean;
@@ -64,6 +66,8 @@ export function Sidebar({
   onUploadToProject,
   onMoveFile,
   onMergeProject,
+  onMergeSubfolder,
+  onExtractSubfolder,
   onCreateFolder,
   autoExpandProjectId,
   isOpen,
@@ -88,6 +92,9 @@ export function Sidebar({
   const [renameValue, setRenameValue] = useState('');
   const [globalFilter, setGlobalFilter] = useState<Map<string, Set<string>> | null>(null);
   const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(null);
+  const [isFolderDragging, setIsFolderDragging] = useState(false);
+  const [extractDropActive, setExtractDropActive] = useState(false);
+  const extractDropCounter = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const effectiveCollapsed = collapsed && isDesktop;
@@ -130,6 +137,16 @@ export function Sidebar({
       onExpandProject(projectId);
     }
   }, [globalFilter, onExpandProject]);
+
+  useEffect(() => {
+    const reset = () => {
+      setIsFolderDragging(false);
+      setExtractDropActive(false);
+      extractDropCounter.current = 0;
+    };
+    document.addEventListener('dragend', reset);
+    return () => document.removeEventListener('dragend', reset);
+  }, []);
 
   const toggleProject = useCallback(
     (projectId: string) => {
@@ -388,7 +405,8 @@ export function Sidebar({
                       onDragOver={(e) => {
                         if (
                           e.dataTransfer.types.includes('application/x-ezmdv-file') ||
-                          e.dataTransfer.types.includes('application/x-ezmdv-project')
+                          e.dataTransfer.types.includes('application/x-ezmdv-project') ||
+                          e.dataTransfer.types.includes('application/x-ezmdv-folder')
                         ) {
                           e.preventDefault();
                           e.dataTransfer.dropEffect = 'move';
@@ -402,6 +420,25 @@ export function Sidebar({
                       }}
                       onDrop={(e) => {
                         setDropTargetProjectId(null);
+                        const folderRaw = e.dataTransfer.getData('application/x-ezmdv-folder');
+                        if (folderRaw && onMergeSubfolder) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          try {
+                            const { projectId: srcProjectId, folderPath } = JSON.parse(folderRaw) as {
+                              projectId: string;
+                              folderPath: string;
+                              folderName: string;
+                            };
+                            if (srcProjectId !== project.id) {
+                              setIsFolderDragging(false);
+                              onMergeSubfolder(project.id, srcProjectId, folderPath);
+                            }
+                          } catch {
+                            // ignore
+                          }
+                          return;
+                        }
                         const projectRaw = e.dataTransfer.getData('application/x-ezmdv-project');
                         if (projectRaw && onMergeProject) {
                           e.preventDefault();
@@ -531,6 +568,12 @@ export function Sidebar({
                             onUploadToProject={onUploadToProject}
                             globalFilter={globalFilter?.get(project.id)}
                             draggable={!!onMoveFile}
+                            onFolderDragStart={() => setIsFolderDragging(true)}
+                            onFolderDragEnd={() => {
+                              setIsFolderDragging(false);
+                              setExtractDropActive(false);
+                              extractDropCounter.current = 0;
+                            }}
                           />
                         </div>
                       )}
@@ -539,6 +582,53 @@ export function Sidebar({
                 })
               )}
             </div>
+
+            {isFolderDragging && (
+              <div
+                className={cn(
+                  'mx-3 mb-2 rounded border-2 border-dashed px-3 py-4 text-center text-xs text-muted-foreground transition-colors',
+                  extractDropActive
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border',
+                )}
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes('application/x-ezmdv-folder')) {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                  }
+                }}
+                onDragEnter={(e) => {
+                  if (e.dataTransfer.types.includes('application/x-ezmdv-folder')) {
+                    extractDropCounter.current += 1;
+                    setExtractDropActive(true);
+                  }
+                }}
+                onDragLeave={() => {
+                  extractDropCounter.current -= 1;
+                  if (extractDropCounter.current === 0) setExtractDropActive(false);
+                }}
+                onDrop={(e) => {
+                  extractDropCounter.current = 0;
+                  setExtractDropActive(false);
+                  setIsFolderDragging(false);
+                  const raw = e.dataTransfer.getData('application/x-ezmdv-folder');
+                  if (!raw || !onExtractSubfolder) return;
+                  e.preventDefault();
+                  try {
+                    const { projectId, folderPath } = JSON.parse(raw) as {
+                      projectId: string;
+                      folderPath: string;
+                      folderName: string;
+                    };
+                    onExtractSubfolder(projectId, folderPath);
+                  } catch {
+                    // ignore
+                  }
+                }}
+              >
+                Drop to create new project
+              </div>
+            )}
 
             {selectMode && selectedCount > 0 ? (
               <div className="flex gap-2 border-t border-border p-3">
