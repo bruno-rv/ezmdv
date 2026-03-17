@@ -39,6 +39,8 @@ interface ExpandedProjectContentProps {
   onUploadToProject?: (projectId: string, files: File[]) => void;
   globalFilter?: Set<string> | null;
   draggable?: boolean;
+  onFolderDragStart?: () => void;
+  onFolderDragEnd?: () => void;
 }
 
 export function ExpandedProjectContent({
@@ -51,6 +53,8 @@ export function ExpandedProjectContent({
   onUploadToProject,
   globalFilter,
   draggable,
+  onFolderDragStart,
+  onFolderDragEnd,
 }: ExpandedProjectContentProps) {
   const [query, setQuery] = useState('');
   const [searchMatches, setSearchMatches] = useState<Set<string> | null>(null);
@@ -300,6 +304,8 @@ export function ExpandedProjectContent({
                 onFileClick={onFileClick}
                 onCreateFolder={onCreateFolder}
                 draggable={draggable}
+                onFolderDragStart={onFolderDragStart}
+                onFolderDragEnd={onFolderDragEnd}
               />
             ))
           ) : (
