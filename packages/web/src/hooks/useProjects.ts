@@ -9,6 +9,8 @@ import {
   moveFile,
   createFolder,
   mergeProjectInto,
+  extractSubfolder as extractSubfolderApi,
+  mergeSubfolderInto,
   type Project,
   type FileTreeEntry,
   type MoveFileResponse,
@@ -144,6 +146,28 @@ export function useProjects() {
     [loadProjectFiles],
   );
 
+  const extractSubfolder = useCallback(
+    async (projectId: string, subfolderPath: string) => {
+      const result = await extractSubfolderApi(projectId, subfolderPath);
+      setProjects((prev) => [...prev, { ...result.project, files: undefined, filesLoading: false }]);
+      await loadProjectFiles(projectId);
+      return result;
+    },
+    [loadProjectFiles],
+  );
+
+  const mergeSubfolder = useCallback(
+    async (destProjectId: string, sourceProjectId: string, subfolderPath: string) => {
+      const result = await mergeSubfolderInto(destProjectId, sourceProjectId, subfolderPath);
+      await Promise.all([
+        loadProjectFiles(destProjectId),
+        loadProjectFiles(sourceProjectId),
+      ]);
+      return result;
+    },
+    [loadProjectFiles],
+  );
+
   const uploadToProject = useCallback(
     async (
       projectId: string,
@@ -170,5 +194,7 @@ export function useProjects() {
     moveFileBetweenProjects,
     createProjectFolder,
     mergeProject,
+    extractSubfolder,
+    mergeSubfolder,
   };
 }
