@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { Tab } from '@/lib/api';
 import type { Pane } from './useTabs';
+import { SHORTCUT_DEFS, matchesEvent, getEffectiveBindings } from '@/lib/shortcuts';
 
 interface UseKeyboardShortcutsOptions {
   activeTab: Tab | null;
@@ -12,6 +13,7 @@ interface UseKeyboardShortcutsOptions {
   fullscreenPane: Pane | null;
   showShortcuts: boolean;
   graphPreview: unknown | null;
+  keyboardShortcuts?: Record<string, string>;
   handleSave: (exitAfter?: boolean) => void;
   handleEnterEdit: () => void;
   handleExitEdit: () => void;
@@ -35,6 +37,7 @@ export function useKeyboardShortcuts({
   fullscreenPane,
   showShortcuts,
   graphPreview,
+  keyboardShortcuts = {},
   handleSave,
   handleEnterEdit,
   handleExitEdit,
@@ -48,42 +51,51 @@ export function useKeyboardShortcuts({
   refreshPaneContent,
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
+    const bindings = getEffectiveBindings(keyboardShortcuts);
+
     function handleKeyDown(e: KeyboardEvent) {
       if (showShortcuts) return;
 
+      // Non-customizable: Escape closes graph preview or exits fullscreen
       if (e.key === 'Escape' && graphPreview) {
         setGraphPreview(null);
         return;
       }
-
-      const isMac = navigator.platform.toUpperCase().includes('MAC');
-      const mod = isMac ? e.metaKey : e.ctrlKey;
-
       if (e.key === 'Escape' && fullscreenPane) {
         e.preventDefault();
         setFullscreenPane(null);
         return;
       }
 
-      if (mod && e.key === 's') {
-        e.preventDefault();
-        if (editMode && primaryTab) {
-          handleSave();
+      // Find matching customizable shortcut
+      let matchedId: string | null = null;
+      for (const def of SHORTCUT_DEFS) {
+        if (!def.customizable) continue;
+        const binding = bindings.get(def.id) ?? def.defaultBinding;
+        if (matchesEvent(binding, e)) {
+          matchedId = def.id;
+          break;
         }
+      }
+
+      if (!matchedId) return;
+
+      // save and toggleEdit are allowed even in input/editor context
+      if (matchedId === 'save') {
+        e.preventDefault();
+        if (editMode && primaryTab) handleSave();
         return;
       }
 
-      if (mod && e.key === 'e') {
+      if (matchedId === 'toggleEdit') {
         e.preventDefault();
         if (splitView) return;
-        if (editMode) {
-          handleExitEdit();
-        } else if (primaryTab && primaryContent !== null) {
-          handleEnterEdit();
-        }
+        if (editMode) handleExitEdit();
+        else if (primaryTab && primaryContent !== null) handleEnterEdit();
         return;
       }
 
+      // Remaining shortcuts are suppressed when focus is in an input/editor
       const target = e.target as HTMLElement;
       if (
         target.tagName === 'INPUT' ||
@@ -94,49 +106,39 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      if (mod && e.shiftKey && (e.key === 'a' || e.key === 'A')) {
-        e.preventDefault();
-        autoScrollToggle();
-        return;
-      }
-
-      if (mod && e.shiftKey && (e.key === 'r' || e.key === 'R')) {
-        e.preventDefault();
-        if (!editMode) {
-          refreshPaneContent('primary');
-        }
-        return;
-      }
-
-      if (mod && e.key === 'w') {
-        e.preventDefault();
-        if (activeTab) {
-          if (
-            editMode &&
-            isDirty &&
-            primaryTab &&
-            activeTab.projectId === primaryTab.projectId &&
-            activeTab.filePath === primaryTab.filePath
-          ) {
-            if (!window.confirm('You have unsaved changes. Close anyway?')) {
-              return;
+      switch (matchedId) {
+        case 'autoScroll':
+          e.preventDefault();
+          autoScrollToggle();
+          break;
+        case 'refresh':
+          e.preventDefault();
+          if (!editMode) refreshPaneContent('primary');
+          break;
+        case 'closeTab':
+          e.preventDefault();
+          if (activeTab) {
+            if (
+              editMode &&
+              isDirty &&
+              primaryTab &&
+              activeTab.projectId === primaryTab.projectId &&
+              activeTab.filePath === primaryTab.filePath
+            ) {
+              if (!window.confirm('You have unsaved changes. Close anyway?')) return;
             }
+            setEditMode(false);
+            closeTab(activeTab.projectId, activeTab.filePath);
           }
-          setEditMode(false);
-          closeTab(activeTab.projectId, activeTab.filePath);
-        }
-        return;
-      }
-
-      if (mod && e.key === ']') {
-        e.preventDefault();
-        switchToNextTab();
-        return;
-      }
-
-      if (mod && e.key === '[') {
-        e.preventDefault();
-        switchToPrevTab();
+          break;
+        case 'nextTab':
+          e.preventDefault();
+          switchToNextTab();
+          break;
+        case 'prevTab':
+          e.preventDefault();
+          switchToPrevTab();
+          break;
       }
     }
 
@@ -153,6 +155,7 @@ export function useKeyboardShortcuts({
     handleExitEdit,
     handleSave,
     isDirty,
+    keyboardShortcuts,
     primaryContent,
     primaryTab,
     refreshPaneContent,

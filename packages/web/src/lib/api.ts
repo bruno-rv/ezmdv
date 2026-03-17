@@ -66,6 +66,7 @@ export interface AppState {
   projects: Project[];
   openTabs: Tab[];
   checkboxStates: Record<string, Record<string, boolean>>;
+  keyboardShortcuts?: Record<string, string>;
 }
 
 const BASE_URL = window.location.origin;

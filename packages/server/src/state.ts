@@ -21,6 +21,7 @@ export interface AppState {
   openTabs: Tab[];
   checkboxStates: Record<string, Record<string, boolean>>;
   dismissedCliPaths: string[];
+  keyboardShortcuts?: Record<string, string>;
 }
 
 const DEFAULT_STATE: AppState = {
@@ -29,6 +30,7 @@ const DEFAULT_STATE: AppState = {
   openTabs: [],
   checkboxStates: {},
   dismissedCliPaths: [],
+  keyboardShortcuts: {},
 };
 
 function getDefaultStatePath(): string {

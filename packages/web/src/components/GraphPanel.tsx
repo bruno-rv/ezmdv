@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { X, Search, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { X, Search, ZoomIn, ZoomOut, RotateCcw, Minus, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ProjectGraph, GraphNode, GraphEdge } from '@/lib/api';
 import { fetchFileContent, searchProjectContent } from '@/lib/api';
@@ -657,46 +657,109 @@ export function GraphPanel({
   );
 }
 
+type ModalState = 'normal' | 'minimized' | 'maximized';
+
 function NodePreview({ preview, onClose }: { preview: PreviewState; onClose: () => void }) {
+  const [modalState, setModalState] = useState<ModalState>('normal');
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (modalState === 'maximized') setModalState('normal');
+        else onClose();
+      }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [onClose, modalState]);
+
+  const cardClass = cn(
+    'flex flex-col border border-border bg-background shadow-2xl',
+    modalState === 'normal' && 'h-[80vh] w-[75vw] max-w-4xl rounded-lg',
+    modalState === 'minimized' && 'fixed bottom-4 left-1/2 -translate-x-1/2 w-[75vw] max-w-4xl rounded-lg h-auto',
+    modalState === 'maximized' && 'fixed inset-0 h-screen w-screen rounded-none',
+  );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={onClose}
-    >
-      <div
-        className="flex h-[80vh] w-[75vw] max-w-4xl flex-col rounded-lg border border-border bg-background shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex shrink-0 items-center justify-between border-b px-4 py-2">
-          <span className="truncate text-sm font-medium">{preview.label}</span>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={onClose}
-            aria-label="Close preview"
-          >
-            <X className="size-4" />
-          </Button>
+    <>
+      {modalState !== 'minimized' && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={onClose}
+        >
+          <div className={cardClass} onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between border-b px-4 py-2">
+              <span className="truncate text-sm font-medium">{preview.label}</span>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setModalState('minimized')}
+                  aria-label="Minimize preview"
+                  title="Minimize"
+                >
+                  <Minus className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setModalState(modalState === 'maximized' ? 'normal' : 'maximized')}
+                  aria-label={modalState === 'maximized' ? 'Restore preview' : 'Maximize preview'}
+                  title={modalState === 'maximized' ? 'Restore' : 'Maximize'}
+                >
+                  {modalState === 'maximized' ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={onClose}
+                  aria-label="Close preview"
+                  title="Close"
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto px-8 py-6">
+              {preview.loading ? (
+                <p className="text-sm text-muted-foreground">Loading preview…</p>
+              ) : preview.content !== null ? (
+                <MarkdownView
+                  content={preview.content}
+                  onLinkClick={noop}
+                />
+              ) : null}
+            </div>
+          </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-auto px-8 py-6">
-          {preview.loading ? (
-            <p className="text-sm text-muted-foreground">Loading preview…</p>
-          ) : preview.content !== null ? (
-            <MarkdownView
-              content={preview.content}
-              onLinkClick={noop}
-            />
-          ) : null}
+      )}
+      {modalState === 'minimized' && (
+        <div className={cn(cardClass, 'z-50')} onClick={(e) => e.stopPropagation()}>
+          <div className="flex shrink-0 items-center justify-between px-4 py-2">
+            <span className="truncate text-sm font-medium">{preview.label}</span>
+            <div className="flex gap-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setModalState('normal')}
+                aria-label="Restore preview"
+                title="Restore"
+              >
+                <Maximize2 className="size-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onClose}
+                aria-label="Close preview"
+                title="Close"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }

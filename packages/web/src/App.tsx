@@ -40,6 +40,7 @@ import {
   fetchFileMetadata,
   fetchProjectFiles,
   fetchProjectGraph,
+  fetchState,
   saveFileContent,
   uploadFiles,
   updateState,
@@ -112,6 +113,13 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [keyboardShortcuts, setKeyboardShortcuts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetchState().then((s) => {
+      if (s.keyboardShortcuts) setKeyboardShortcuts(s.keyboardShortcuts);
+    }).catch(() => {});
+  }, []);
   const [autoExpandProjectId, setAutoExpandProjectId] = useState<string | null>(null);
   const [paneStates, setPaneStates] = useState(INITIAL_PANE_STATES);
   const [graphProjectId, setGraphProjectId] = useState<string | null>(null);
@@ -371,6 +379,7 @@ function App() {
     fullscreenPane,
     showShortcuts,
     graphPreview,
+    keyboardShortcuts,
     handleSave,
     handleEnterEdit,
     handleExitEdit,
@@ -614,6 +623,25 @@ function App() {
       });
     },
     [extractSubfolder],
+  );
+
+  const handleUpdateShortcut = useCallback(
+    (id: string, binding: string) => {
+      const next = { ...keyboardShortcuts, [id]: binding };
+      setKeyboardShortcuts(next);
+      updateState({ keyboardShortcuts: next }).catch(() => {});
+    },
+    [keyboardShortcuts],
+  );
+
+  const handleResetShortcut = useCallback(
+    (id: string) => {
+      const next = { ...keyboardShortcuts };
+      delete next[id];
+      setKeyboardShortcuts(next);
+      updateState({ keyboardShortcuts: next }).catch(() => {});
+    },
+    [keyboardShortcuts],
   );
 
   const handleCreateFolder = useCallback(
@@ -1152,7 +1180,14 @@ function App() {
           </div>
         )}
       </main>
-      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      {showShortcuts && (
+        <ShortcutsModal
+          onClose={() => setShowShortcuts(false)}
+          keyboardShortcuts={keyboardShortcuts}
+          onUpdateShortcut={handleUpdateShortcut}
+          onResetShortcut={handleResetShortcut}
+        />
+      )}
       {graphPreview && (
         <GraphPreviewModal
           filePath={graphPreview.filePath}

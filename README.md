@@ -1,3 +1,5 @@
+<img src="docs/logo.png" alt="ezmdv logo" width="300" />
+
 # ezmdv
 
 Easy Markdown Viewer is a browser-based markdown viewer/editor launched from the CLI.
@@ -25,11 +27,12 @@ It is a monorepo with three packages:
 - Open two markdown files side by side for reading
 - Fullscreen a markdown pane
 - Interactive project graph with constellation visuals (glow, gradients, floating animation), smooth drag, link highlighting, and zoom/pan controls
+- Graph node preview modal with minimize/maximize/restore controls
 - Per-project and global search with exact and fuzzy modes (trigram + stemming)
 - Refresh from disk button and keyboard shortcut (`Ctrl/Cmd+Shift+R`)
 - Drag-and-drop `.md` files onto the app to upload
 - Autoscroll (teleprompter mode) with configurable interval and scroll percentage
-- Keyboard shortcuts for common actions
+- Customizable keyboard shortcuts — remap any action from the shortcuts modal and changes persist across sessions
 - Drag-and-drop projects onto each other to merge as subfolders (no confirmation dialog)
 - Drag a **subfolder** from the file tree onto another project header to merge it into that project
 - Drag a **subfolder** from the file tree to the drop zone below the project list to extract it as a new standalone project
@@ -48,7 +51,13 @@ npm install
 npm start
 ```
 
-This builds everything and opens your browser. Click **Upload** in the sidebar to select your `.md` files and start reading.
+This builds everything and opens your browser to the repo root. For your own notes, pass a path instead:
+
+```bash
+ezmdv ~/notes
+```
+
+Click **Upload** in the sidebar to select `.md` files if you don't have a local folder to point at.
 
 ### Updating an existing clone
 
@@ -62,8 +71,8 @@ Always run `git pull` before `npm install` — build scripts and dependencies ma
 
 ## Requirements
 
-- Node.js (v18+)
-- npm
+- Node.js **v22+** (22 is the current LTS; earlier versions lack `import.meta.dirname`)
+- npm 10+
 
 ## Build
 
@@ -140,7 +149,7 @@ npm test
 
 ezmdv stores application data under `~/.ezmdv/`:
 
-- `state.json`: projects, theme, open tabs, checkbox state, dismissed CLI paths
+- `state.json`: projects, theme, open tabs, checkbox state, dismissed CLI paths, keyboard shortcut overrides
 - `uploads/`: uploaded markdown projects
 - `trash/`: soft-deleted uploads (auto-purged after 30 days)
 

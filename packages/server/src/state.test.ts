@@ -27,6 +27,7 @@ describe('readState', () => {
       openTabs: [],
       checkboxStates: {},
       dismissedCliPaths: [],
+      keyboardShortcuts: {},
     });
   });
 
