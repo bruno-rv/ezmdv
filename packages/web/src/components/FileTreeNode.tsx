@@ -18,6 +18,8 @@ interface FileTreeNodeProps {
   onFileClick: (projectId: string, filePath: string) => void;
   onCreateFolder?: (projectId: string, folderPath: string) => void;
   draggable?: boolean;
+  onFolderDragStart?: () => void;
+  onFolderDragEnd?: () => void;
 }
 
 export function FileTreeNode({
@@ -28,6 +30,8 @@ export function FileTreeNode({
   onFileClick,
   onCreateFolder,
   draggable,
+  onFolderDragStart,
+  onFolderDragEnd,
 }: FileTreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
   const [creatingSubfolder, setCreatingSubfolder] = useState(false);
@@ -50,7 +54,18 @@ export function FileTreeNode({
 
   if (entry.type === 'directory') {
     return (
-      <div>
+      <div
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData(
+            'application/x-ezmdv-folder',
+            JSON.stringify({ projectId, folderPath: entry.path, folderName: entry.name }),
+          );
+          e.dataTransfer.effectAllowed = 'move';
+          onFolderDragStart?.();
+        }}
+        onDragEnd={() => onFolderDragEnd?.()}
+      >
         <div className="group flex items-center">
           <button
             className="flex flex-1 items-center gap-1.5 rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
@@ -97,6 +112,8 @@ export function FileTreeNode({
                 onFileClick={onFileClick}
                 onCreateFolder={onCreateFolder}
                 draggable={draggable}
+                onFolderDragStart={onFolderDragStart}
+                onFolderDragEnd={onFolderDragEnd}
               />
             ))}
             {creatingSubfolder && (
