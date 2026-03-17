@@ -116,17 +116,11 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [keyboardShortcuts, setKeyboardShortcuts] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    fetchState().then((s) => {
-      if (s.keyboardShortcuts) setKeyboardShortcuts(s.keyboardShortcuts);
-    }).catch(() => {});
-  }, []);
-
   const [zoomLevels, setZoomLevels] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchState().then((s) => {
+      if (s.keyboardShortcuts) setKeyboardShortcuts(s.keyboardShortcuts);
       if (s.zoomLevels) setZoomLevels(s.zoomLevels);
     }).catch(() => {});
   }, []);
@@ -1098,7 +1092,6 @@ function App() {
       setFullscreenPane,
       splitView,
       theme,
-      zoomLevels,
     ],
   );
 
