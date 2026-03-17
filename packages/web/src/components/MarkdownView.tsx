@@ -15,12 +15,14 @@ interface MarkdownViewProps {
   content: string;
   onLinkClick: (target: string, kind: InternalLinkKind) => void;
   onCheckboxChange?: (index: number, checked: boolean) => void;
+  zoom?: number;
 }
 
 export function MarkdownView({
   content,
   onLinkClick,
   onCheckboxChange,
+  zoom = 1,
 }: MarkdownViewProps) {
   const remarkPlugins = useMemo(() => [remarkGfm], []);
   const rehypePlugins = useMemo(() => [rehypeHighlight], []);
@@ -249,7 +251,11 @@ export function MarkdownView({
   }, [onLinkClick, onCheckboxChange, footnoteMap]);
 
   return (
-    <div className="markdown-body prose prose-sm dark:prose-invert max-w-none" ref={containerRef}>
+    <div
+      className="markdown-body prose prose-sm dark:prose-invert max-w-none"
+      style={zoom !== 1 ? { fontSize: `${zoom * 100}%` } : undefined}
+      ref={containerRef}
+    >
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
