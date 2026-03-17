@@ -114,7 +114,7 @@ export function ExpandedProjectContent({
       {!globalFilter && (
         <div className="px-3 pt-1 space-y-1">
           {/* Row 1: full-width search */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center">
             <label className="relative flex-1">
               <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -124,6 +124,10 @@ export function ExpandedProjectContent({
                 className="h-8 w-full rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none ring-0 transition-colors focus:border-primary"
               />
             </label>
+          </div>
+
+          {/* Row 2: action icons */}
+          <div className="flex items-center justify-end gap-0.5">
             <button
               className={cn(
                 'shrink-0 rounded px-1.5 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors',
@@ -136,10 +140,6 @@ export function ExpandedProjectContent({
             >
               {searchMode === 'fuzzy' ? '~' : 'Aa'}
             </button>
-          </div>
-
-          {/* Row 2: action icons */}
-          <div className="flex items-center justify-end gap-0.5">
             {onCreateFile && (
               <Button
                 variant="ghost"

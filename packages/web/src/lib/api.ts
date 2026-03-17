@@ -70,6 +70,10 @@ export interface AppState {
 
 const BASE_URL = window.location.origin;
 
+function encodeFilePath(fp: string): string {
+  return fp.split('/').map(encodeURIComponent).join('/');
+}
+
 async function request<T>(
   path: string,
   options?: RequestInit,
@@ -102,7 +106,7 @@ export async function fetchFileContent(
   filePath: string,
 ): Promise<string> {
   const res = await fetch(
-    `${BASE_URL}/api/projects/${projectId}/files/${filePath}`,
+    `${BASE_URL}/api/projects/${projectId}/files/${encodeFilePath(filePath)}`,
   );
   if (!res.ok) {
     const body = await res.text();
@@ -199,7 +203,7 @@ export async function saveFileContent(
   filePath: string,
   content: string,
 ): Promise<void> {
-  await request(`/api/projects/${projectId}/files/${filePath}`, {
+  await request(`/api/projects/${projectId}/files/${encodeFilePath(filePath)}`, {
     method: 'PUT',
     body: JSON.stringify({ content }),
   });

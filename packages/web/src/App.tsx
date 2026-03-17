@@ -583,13 +583,6 @@ function App() {
         alert('Could not find one of the projects.');
         return;
       }
-      if (
-        !window.confirm(
-          `Merge "${source.name}" into "${dest.name}" as a subfolder?`,
-        )
-      ) {
-        return;
-      }
       mergeProject(destProjectId, sourceProjectId)
         .then(() => {
           closeProjectTabs(sourceProjectId);
@@ -1069,6 +1062,7 @@ function App() {
           onOpenGraph={handleOpenGraph}
           onCreateFile={handleCreateFile}
           onShowShortcuts={() => setShowShortcuts(true)}
+          onCreateProject={(name) => addProject({ name, path: '', source: 'upload' })}
         />
       )}
 

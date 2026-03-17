@@ -8,6 +8,12 @@ It is a monorepo with three packages:
 - `packages/server`: Express API + WebSocket server
 - `packages/web`: React SPA
 
+## Screenshots
+
+![Graph view showing wiki-link connections between notes](docs/screenshots/graph.png)
+
+![Reader view with autoscroll speed controls](docs/screenshots/reader.png)
+
 ## Features
 
 - Open a markdown project from the CLI or upload files directly in the browser

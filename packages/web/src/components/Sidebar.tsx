@@ -14,6 +14,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Keyboard,
+  FolderPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -49,6 +50,7 @@ interface SidebarProps {
   onOpenGraph: (projectId: string) => void;
   onCreateFile: (projectId: string, filePath: string) => void;
   onShowShortcuts: () => void;
+  onCreateProject?: (name: string) => void;
 }
 
 export function Sidebar({
@@ -77,6 +79,7 @@ export function Sidebar({
   onOpenGraph,
   onCreateFile,
   onShowShortcuts,
+  onCreateProject,
 }: SidebarProps) {
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== 'undefined'
@@ -317,6 +320,20 @@ export function Sidebar({
                 title="Select projects"
               >
                 <ListChecks className="size-4" />
+              </Button>
+            )}
+            {!effectiveCollapsed && onCreateProject && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  const name = window.prompt('Project name:');
+                  if (name?.trim()) onCreateProject(name.trim());
+                }}
+                aria-label="Create new project"
+                title="Create new project"
+              >
+                <FolderPlus className="size-4" />
               </Button>
             )}
             <Button
