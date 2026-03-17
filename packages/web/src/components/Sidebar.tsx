@@ -249,6 +249,18 @@ export function Sidebar({
               effectiveCollapsed && 'md:flex-col',
             )}
           >
+            {effectiveCollapsed && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="hidden md:inline-flex"
+                onClick={onToggleCollapse}
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+              >
+                <PanelLeftOpen className="size-4" />
+              </Button>
+            )}
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <File className="size-4" />
             </div>
@@ -258,20 +270,18 @@ export function Sidebar({
           </div>
 
           <div className={cn('flex items-center gap-1', effectiveCollapsed && 'md:flex-col')}>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="hidden md:inline-flex"
-              onClick={onToggleCollapse}
-              aria-label={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              title={effectiveCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {effectiveCollapsed ? (
-                <PanelLeftOpen className="size-4" />
-              ) : (
+            {!effectiveCollapsed && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="hidden md:inline-flex"
+                onClick={onToggleCollapse}
+                aria-label="Collapse sidebar"
+                title="Collapse sidebar"
+              >
                 <PanelLeftClose className="size-4" />
-              )}
-            </Button>
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"
