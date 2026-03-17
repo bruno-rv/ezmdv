@@ -24,7 +24,7 @@ npm run dev:web     # Vite dev server with HMR, proxies API to :3000 → open :5
 
 For rapid iteration use the dev workflow: `dev:server` + `dev:web` in two terminals.
 
-Tests use Vitest (server + web packages). Server tests cover state, security, markdown graph/search, filesystem, API routes, and fuzzy search. Web tests cover wiki-links, pane workspace, hooks (edit mode, autoscroll), graph filtering/zoom, wiki-link autocomplete, and search toolbar layout.
+Tests use Vitest (server + web packages). Server tests cover state, security, markdown graph/search, filesystem, API routes, subfolder extract/merge, and fuzzy search. Web tests cover wiki-links, pane workspace, hooks (edit mode, autoscroll), graph filtering/zoom, wiki-link autocomplete, and search toolbar layout.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ Tests use Vitest (server + web packages). Server tests cover state, security, ma
 - **Trash**: Deleted upload projects moved to `~/.ezmdv/trash/<id>/` (`meta.json` + `files/`). Purged after 30 days on server startup
 - **WebSocket**: Chokidar watches project dirs, broadcasts `file-changed` events
 - **CORS**: Restricted to localhost origins only
-- **API routes**: `/api/projects` (CRUD + rename + file read/write + create-file + create-folder + merge-project + upload + graph + per-project search + global search), `/api/state` (GET/PATCH)
+- **API routes**: `/api/projects` (CRUD + rename + file read/write + create-file + create-folder + merge-project + extract-subfolder + merge-subfolder + upload + graph + per-project search + global search), `/api/state` (GET/PATCH)
 - **Shared constants**: `IGNORED_DIRS` in `packages/server/src/constants.ts`
 - **Security module**: `packages/server/src/security.ts` — `isPathWithinRoot()` for path traversal, `projectLookup()` Express middleware for DRY project resolution
 
@@ -61,7 +61,9 @@ Tests use Vitest (server + web packages). Server tests cover state, security, ma
 - **File uploads**: Multi-file picker (`accept=".md"`, `multiple`) + drag-and-drop. Always use `File[]` not `FileList` — `FileList` empties when `input.value` is reset. Convert with `Array.from()` before any async work
 - **File creation**: `POST /api/projects/:id/create-file`; `FilePlus` icon in `ExpandedProjectContent`; auto-appends `.md`; creates parent dirs; opens new file in tab
 - **Folder creation**: `POST /api/projects/:id/create-folder`; `FolderPlus` icon in `ExpandedProjectContent`; creates dirs recursively
-- **Project merging**: `POST /api/projects/:id/merge-project`; drag a project onto another in sidebar to merge as subfolder. Copies files respecting `IGNORED_DIRS`, remaps `openTabs` and `checkboxStates`
+- **Project merging**: `POST /api/projects/:id/merge-project`; drag a project onto another in sidebar to merge as subfolder (no confirm dialog). Copies files respecting `IGNORED_DIRS`, remaps `openTabs` and `checkboxStates`
+- **Subfolder drag-out**: `POST /api/projects/:id/extract-subfolder`; drag a folder node in `FileTreeNode` to the extraction drop zone below the project list to create a new upload project. `POST /api/projects/:id/merge-subfolder`; drag a folder node onto another project header to merge it there. Both use `writeState` (not `updateState`) so remapped checkbox keys fully replace old ones. `isFolderDragging` state in Sidebar controls drop zone visibility; counter-based drag enter/leave prevents flicker
+- **Subfolder creation**: `FolderPlus` button appears on directory rows in `FileTreeNode` (hover-visible); opens inline input at correct depth. Inputs submit on blur. `onCreateFolder` threaded through `ExpandedProjectContent` → `FileTreeNode`
 - **Workspace shell**: Sidebar collapses to icon rail. Supports split view, pane swapping, graph panel, fullscreen per pane, multi-select for bulk delete/open
 - **Autoscroll**: `useAutoScroll` — two-phase RAF loop (wait → animate). Configurable interval (1–30s) and scroll percent (1–100%). `AutoScrollControls` has play/pause + settings popover. Auto-stops at bottom or on edit/split/graph/tab-switch. Pauses 2s on wheel/touch. View mode + single pane only
 - **Dismissed CLI paths**: Deleted CLI-sourced projects add path to `state.dismissedCliPaths`; CLI skips these on restart

@@ -24,8 +24,10 @@ It is a monorepo with three packages:
 - Drag-and-drop `.md` files onto the app to upload
 - Autoscroll (teleprompter mode) with configurable interval and scroll percentage
 - Keyboard shortcuts for common actions
-- Drag-and-drop projects onto each other to merge as subfolders
-- Create subfolders within projects
+- Drag-and-drop projects onto each other to merge as subfolders (no confirmation dialog)
+- Drag a **subfolder** from the file tree onto another project header to merge it into that project
+- Drag a **subfolder** from the file tree to the drop zone below the project list to extract it as a new standalone project
+- Create subfolders within projects directly from the file tree
 - Multi-select projects for bulk delete/open
 - File metadata tooltip (size, line count, dates)
 - Light and dark theme
@@ -119,13 +121,13 @@ Open `http://localhost:5173` — changes hot-reload instantly via Vite HMR.
 
 ## Tests
 
-157 tests across 16 files using Vitest:
+162 tests across 16 files using Vitest:
 
 ```bash
 npm test
 ```
 
-- **Server** (92 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, fuzzy search (trigrams, stemming, scoring)
+- **Server** (97 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, subfolder extraction, subfolder merge, fuzzy search (trigrams, stemming, scoring)
 - **Web** (65 tests, 10 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom, ExpandedProjectContent component, GlobalSearch component
 
 ## Local Data
