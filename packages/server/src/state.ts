@@ -22,6 +22,7 @@ export interface AppState {
   checkboxStates: Record<string, Record<string, boolean>>;
   dismissedCliPaths: string[];
   keyboardShortcuts?: Record<string, string>;
+  zoomLevels?: Record<string, number>;
 }
 
 const DEFAULT_STATE: AppState = {
@@ -31,6 +32,7 @@ const DEFAULT_STATE: AppState = {
   checkboxStates: {},
   dismissedCliPaths: [],
   keyboardShortcuts: {},
+  zoomLevels: {},
 };
 
 function getDefaultStatePath(): string {
@@ -71,6 +73,11 @@ export function updateState(
         ...checks,
       };
     }
+  }
+
+  // Plain replacement — client always sends the full map
+  if (partial.zoomLevels !== undefined) {
+    merged.zoomLevels = partial.zoomLevels;
   }
 
   writeState(merged, statePath);

@@ -28,6 +28,7 @@ describe('readState', () => {
       checkboxStates: {},
       dismissedCliPaths: [],
       keyboardShortcuts: {},
+      zoomLevels: {},
     });
   });
 
@@ -98,5 +99,46 @@ describe('updateState', () => {
       '0': true,
       '1': false,
     });
+  });
+});
+
+describe('zoomLevels', () => {
+  it('includes zoomLevels in default state', () => {
+    const state = readState('/nonexistent/path/state.json');
+    expect(state.zoomLevels).toEqual({});
+  });
+
+  it('updateState replaces zoomLevels entirely (not additive merge)', () => {
+    const statePath = makeTempStatePath();
+    writeState({
+      theme: 'light',
+      projects: [],
+      openTabs: [],
+      checkboxStates: {},
+      dismissedCliPaths: [],
+      zoomLevels: { 'p1:a.md': 1.5, 'p1:b.md': 0.8 },
+    }, statePath);
+
+    // Sending a map with only one key should REPLACE the whole map
+    const updated = updateState({ zoomLevels: { 'p1:a.md': 1.2 } }, statePath);
+
+    expect(updated.zoomLevels).toEqual({ 'p1:a.md': 1.2 });
+    expect(updated.zoomLevels!['p1:b.md']).toBeUndefined();
+  });
+
+  it('updateState with empty zoomLevels clears all zoom entries', () => {
+    const statePath = makeTempStatePath();
+    writeState({
+      theme: 'light',
+      projects: [],
+      openTabs: [],
+      checkboxStates: {},
+      dismissedCliPaths: [],
+      zoomLevels: { 'p1:a.md': 1.5 },
+    }, statePath);
+
+    const updated = updateState({ zoomLevels: {} }, statePath);
+
+    expect(updated.zoomLevels).toEqual({});
   });
 });
