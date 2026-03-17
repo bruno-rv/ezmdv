@@ -225,6 +225,11 @@ export function ExpandedProjectContent({
             placeholder="new-note.md"
             className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
             onBlur={() => {
+              const name = newFileName.trim();
+              if (name && onCreateFile) {
+                const filePath = name.toLowerCase().endsWith('.md') ? name : `${name}.md`;
+                onCreateFile(project.id, filePath);
+              }
               setCreatingFile(false);
               setNewFileName('');
             }}
@@ -257,6 +262,10 @@ export function ExpandedProjectContent({
             placeholder="new-folder"
             className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
             onBlur={() => {
+              const name = newFolderName.trim();
+              if (name && onCreateFolder) {
+                onCreateFolder(project.id, name);
+              }
               setCreatingFolder(false);
               setNewFolderName('');
             }}
@@ -289,6 +298,7 @@ export function ExpandedProjectContent({
                 activeTab={activeTab}
                 depth={1}
                 onFileClick={onFileClick}
+                onCreateFolder={onCreateFolder}
                 draggable={draggable}
               />
             ))

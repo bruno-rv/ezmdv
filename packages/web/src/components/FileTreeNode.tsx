@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   ChevronRight,
   ChevronDown,
   File,
   FolderOpen,
   FolderClosed,
+  FolderPlus,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Tab, FileTreeEntry } from '@/lib/api';
@@ -15,6 +16,7 @@ interface FileTreeNodeProps {
   activeTab: Tab | null;
   depth: number;
   onFileClick: (projectId: string, filePath: string) => void;
+  onCreateFolder?: (projectId: string, folderPath: string) => void;
   draggable?: boolean;
 }
 
@@ -24,35 +26,65 @@ export function FileTreeNode({
   activeTab,
   depth,
   onFileClick,
+  onCreateFolder,
   draggable,
 }: FileTreeNodeProps) {
   const [expanded, setExpanded] = useState(false);
+  const [creatingSubfolder, setCreatingSubfolder] = useState(false);
+  const [subfolderName, setSubfolderName] = useState('');
+  const subfolderInputRef = useRef<HTMLInputElement>(null);
 
   const isActive =
     entry.type === 'file' &&
     activeTab?.projectId === projectId &&
     activeTab?.filePath === entry.path;
 
+  function submitSubfolder() {
+    const name = subfolderName.trim();
+    if (name && onCreateFolder) {
+      onCreateFolder(projectId, `${entry.path}/${name}`);
+    }
+    setCreatingSubfolder(false);
+    setSubfolderName('');
+  }
+
   if (entry.type === 'directory') {
     return (
       <div>
-        <button
-          className="flex w-full items-center gap-1.5 rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          style={{ paddingLeft: `${depth * 12 + 8}px` }}
-          onClick={() => setExpanded((prev) => !prev)}
-        >
-          {expanded ? (
-            <ChevronDown className="size-3.5 shrink-0" />
-          ) : (
-            <ChevronRight className="size-3.5 shrink-0" />
+        <div className="group flex items-center">
+          <button
+            className="flex flex-1 items-center gap-1.5 rounded px-2 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+            style={{ paddingLeft: `${depth * 12 + 8}px` }}
+            onClick={() => setExpanded((prev) => !prev)}
+          >
+            {expanded ? (
+              <ChevronDown className="size-3.5 shrink-0" />
+            ) : (
+              <ChevronRight className="size-3.5 shrink-0" />
+            )}
+            {expanded ? (
+              <FolderOpen className="size-3.5 shrink-0 text-amber-500" />
+            ) : (
+              <FolderClosed className="size-3.5 shrink-0 text-amber-500" />
+            )}
+            <span className="truncate">{entry.name}</span>
+          </button>
+          {onCreateFolder && (
+            <button
+              className="mr-1 shrink-0 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+              title="Create subfolder"
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(true);
+                setCreatingSubfolder(true);
+                setSubfolderName('');
+                setTimeout(() => subfolderInputRef.current?.focus(), 0);
+              }}
+            >
+              <FolderPlus className="size-3.5" />
+            </button>
           )}
-          {expanded ? (
-            <FolderOpen className="size-3.5 shrink-0 text-amber-500" />
-          ) : (
-            <FolderClosed className="size-3.5 shrink-0 text-amber-500" />
-          )}
-          <span className="truncate">{entry.name}</span>
-        </button>
+        </div>
         {expanded && entry.children && (
           <div>
             {entry.children.map((child) => (
@@ -63,9 +95,35 @@ export function FileTreeNode({
                 activeTab={activeTab}
                 depth={depth + 1}
                 onFileClick={onFileClick}
+                onCreateFolder={onCreateFolder}
                 draggable={draggable}
               />
             ))}
+            {creatingSubfolder && (
+              <form
+                className="flex items-center gap-1 py-0.5"
+                style={{ paddingLeft: `${(depth + 1) * 12 + 8}px`, paddingRight: '8px' }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  submitSubfolder();
+                }}
+              >
+                <input
+                  ref={subfolderInputRef}
+                  value={subfolderName}
+                  onChange={(e) => setSubfolderName(e.target.value)}
+                  placeholder="new-folder"
+                  className="h-6 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+                  onBlur={submitSubfolder}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setCreatingSubfolder(false);
+                      setSubfolderName('');
+                    }
+                  }}
+                />
+              </form>
+            )}
           </div>
         )}
       </div>
