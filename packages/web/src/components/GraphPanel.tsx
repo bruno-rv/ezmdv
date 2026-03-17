@@ -16,6 +16,9 @@ interface GraphPanelProps {
   openFilePaths: Set<string>;
   onClose: () => void;
   onOpenFile: (filePath: string) => void;
+  getZoom?: (projectId: string, filePath: string) => number;
+  onZoomChange?: (projectId: string, filePath: string, delta: number) => void;
+  onZoomReset?: (projectId: string, filePath: string) => void;
 }
 
 interface PositionedNode extends GraphNode {

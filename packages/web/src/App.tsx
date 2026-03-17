@@ -12,6 +12,8 @@ import {
   Save,
   Upload,
   X,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { AutoScrollControls } from '@/components/AutoScrollControls';
 import { Button } from '@/components/ui/button';
@@ -120,6 +122,15 @@ function App() {
       if (s.keyboardShortcuts) setKeyboardShortcuts(s.keyboardShortcuts);
     }).catch(() => {});
   }, []);
+
+  const [zoomLevels, setZoomLevels] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    fetchState().then((s) => {
+      if (s.zoomLevels) setZoomLevels(s.zoomLevels);
+    }).catch(() => {});
+  }, []);
+
   const [autoExpandProjectId, setAutoExpandProjectId] = useState<string | null>(null);
   const [paneStates, setPaneStates] = useState(INITIAL_PANE_STATES);
   const [graphProjectId, setGraphProjectId] = useState<string | null>(null);
@@ -127,7 +138,11 @@ function App() {
   const [graphLoading, setGraphLoading] = useState(false);
   const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null);
   const [editorFilePaths, setEditorFilePaths] = useState<string[]>([]);
-  const [graphPreview, setGraphPreview] = useState<{ filePath: string; content: string } | null>(null);
+  const [graphPreview, setGraphPreview] = useState<{
+    projectId: string;
+    filePath: string;
+    content: string;
+  } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const dragCounterRef = useRef(0);
 
@@ -644,6 +659,41 @@ function App() {
     [keyboardShortcuts],
   );
 
+  const getZoom = useCallback(
+    (projectId: string, filePath: string): number => {
+      return zoomLevels[`${projectId}:${filePath}`] ?? 1;
+    },
+    [zoomLevels],
+  );
+
+  const handleZoomChange = useCallback(
+    (projectId: string, filePath: string, delta: number) => {
+      const key = `${projectId}:${filePath}`;
+      const current = zoomLevels[key] ?? 1;
+      const next = Math.min(2, Math.max(0.5, Math.round((current + delta) * 10) / 10));
+      if (next === 1) {
+        const { [key]: _, ...rest } = zoomLevels;
+        setZoomLevels(rest);
+        updateState({ zoomLevels: rest }).catch(() => {});
+      } else {
+        const updated = { ...zoomLevels, [key]: next };
+        setZoomLevels(updated);
+        updateState({ zoomLevels: updated }).catch(() => {});
+      }
+    },
+    [zoomLevels],
+  );
+
+  const handleZoomReset = useCallback(
+    (projectId: string, filePath: string) => {
+      const key = `${projectId}:${filePath}`;
+      const { [key]: _, ...rest } = zoomLevels;
+      setZoomLevels(rest);
+      updateState({ zoomLevels: rest }).catch(() => {});
+    },
+    [zoomLevels],
+  );
+
   const handleCreateFolder = useCallback(
     async (projectId: string, folderPath: string) => {
       try {
@@ -712,7 +762,7 @@ function App() {
       if (!graphProjectId) return;
       try {
         const content = await fetchFileContent(graphProjectId, filePath);
-        setGraphPreview({ filePath, content });
+        setGraphPreview({ projectId: graphProjectId, filePath, content });
       } catch {
         // ignore
       }
@@ -726,6 +776,7 @@ function App() {
       options: { allowEdit: boolean; splitContext: boolean },
     ) => {
       const tab = pane === 'primary' ? primaryTab : secondaryTab;
+      const zoom = tab ? getZoom(tab.projectId, tab.filePath) : 1;
       const paneState = paneStates[pane];
       const isFocused = focusedPane === pane;
       const isFullscreen = fullscreenPane === pane;
@@ -873,6 +924,46 @@ function App() {
               </Button>
             )}
 
+            {!editMode && tab && (
+              <>
+                <div className="mx-1 h-4 w-px bg-border" />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleZoomChange(tab.projectId, tab.filePath, -0.1);
+                  }}
+                  aria-label="Zoom out"
+                  title="Zoom out"
+                >
+                  <ZoomOut className="size-4" />
+                </Button>
+                <button
+                  className="min-w-[3rem] text-center text-xs text-muted-foreground tabular-nums select-none"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    handleZoomReset(tab.projectId, tab.filePath);
+                  }}
+                  title="Double-click to reset zoom"
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleZoomChange(tab.projectId, tab.filePath, +0.1);
+                  }}
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="size-4" />
+                </Button>
+              </>
+            )}
+
             {options.allowEdit &&
               (editMode ? (
                 <>
@@ -964,6 +1055,7 @@ function App() {
             >
               <MarkdownView
                 content={paneState.content}
+                zoom={zoom}
                 onLinkClick={(target, kind) => handleLinkClick(pane, target, kind)}
                 onCheckboxChange={(index, checked) =>
                   handleCheckboxChange(pane, index, checked)
@@ -987,11 +1079,14 @@ function App() {
       focusPane,
       focusedPane,
       fullscreenPane,
+      getZoom,
       handleCheckboxChange,
       handleEnterEdit,
       handleLinkClick,
       handleSave,
       handleSplitView,
+      handleZoomChange,
+      handleZoomReset,
       isDirty,
       metaTooltip,
       paneStates,
@@ -1003,6 +1098,7 @@ function App() {
       setFullscreenPane,
       splitView,
       theme,
+      zoomLevels,
     ],
   );
 
@@ -1137,6 +1233,9 @@ function App() {
             openFilePaths={openFilePaths}
             onClose={() => setGraphProjectId(null)}
             onOpenFile={handleGraphNodeOpen}
+            getZoom={getZoom}
+            onZoomChange={handleZoomChange}
+            onZoomReset={handleZoomReset}
           />
         ) : splitView ? (
           <div className="relative grid min-h-0 flex-1 gap-px bg-border md:grid-cols-2">
@@ -1192,6 +1291,10 @@ function App() {
         <GraphPreviewModal
           filePath={graphPreview.filePath}
           content={graphPreview.content}
+          zoom={getZoom(graphPreview.projectId, graphPreview.filePath)}
+          onZoomIn={() => handleZoomChange(graphPreview.projectId, graphPreview.filePath, +0.1)}
+          onZoomOut={() => handleZoomChange(graphPreview.projectId, graphPreview.filePath, -0.1)}
+          onZoomReset={() => handleZoomReset(graphPreview.projectId, graphPreview.filePath)}
           onClose={setGraphPreviewNull}
         />
       )}

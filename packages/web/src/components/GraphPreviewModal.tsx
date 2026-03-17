@@ -7,6 +7,10 @@ const noop = () => {};
 interface GraphPreviewModalProps {
   filePath: string;
   content: string;
+  zoom?: number;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onZoomReset?: () => void;
   onClose: () => void;
 }
 
