@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import multer from 'multer';
-import { readState, updateState, type Project } from '../state.js';
+import { readState, updateState, writeState, type Project } from '../state.js';
 import {
   buildProjectGraphFromFiles,
   collectMarkdownFiles,
@@ -557,6 +557,163 @@ export function createProjectRoutes(statePath?: string): Router {
     );
 
     res.json({ merged: true, subfolderName: sourceName });
+  });
+
+  // POST /api/projects/:id/extract-subfolder
+  router.post('/:id/extract-subfolder', withProject, (req: Request, res: Response) => {
+    const { project: sourceProject } = req as ProjectRequest;
+    const { subfolderPath } = req.body as { subfolderPath?: string };
+
+    if (!subfolderPath) {
+      res.status(400).json({ error: 'subfolderPath is required' });
+      return;
+    }
+
+    const srcDir = path.join(sourceProject.path, subfolderPath);
+    if (!isPathWithinRoot(srcDir, sourceProject.path)) {
+      res.status(403).json({ error: 'Path traversal detected' });
+      return;
+    }
+
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(srcDir);
+    } catch {
+      res.status(400).json({ error: 'Path does not exist' });
+      return;
+    }
+    if (!stat.isDirectory()) {
+      res.status(400).json({ error: 'Path is not a directory' });
+      return;
+    }
+
+    const folderName = path.basename(subfolderPath);
+    const newId = uuidv4();
+    const safeName = folderName.replace(/[^a-zA-Z0-9_\-. ]/g, '_');
+    let newProjectPath = path.join(os.homedir(), '.ezmdv', 'uploads', safeName);
+    if (fs.existsSync(newProjectPath)) {
+      newProjectPath = path.join(os.homedir(), '.ezmdv', 'uploads', `${safeName}_${newId.slice(0, 6)}`);
+    }
+
+    try {
+      copyDirRecursive(srcDir, newProjectPath, newProjectPath);
+    } catch {
+      res.status(500).json({ error: 'Failed to copy files' });
+      return;
+    }
+
+    try {
+      fs.rmSync(srcDir, { recursive: true, force: true });
+    } catch {
+      // best effort
+    }
+
+    const newProject: Project = {
+      id: newId,
+      name: folderName,
+      source: 'upload',
+      path: newProjectPath,
+      lastOpened: new Date().toISOString(),
+    };
+
+    const state = readState(statePath);
+    state.projects.push(newProject);
+
+    const prefix = subfolderPath + '/';
+    state.openTabs = state.openTabs.map((t) => {
+      if (t.projectId === sourceProject.id && t.filePath.startsWith(prefix)) {
+        return { projectId: newId, filePath: t.filePath.slice(prefix.length) };
+      }
+      return t;
+    });
+
+    const newCheckboxStates: Record<string, Record<string, boolean>> = {};
+    const oldKeyPrefix = `${sourceProject.id}:${prefix}`;
+    for (const [key, value] of Object.entries(state.checkboxStates)) {
+      if (key.startsWith(oldKeyPrefix)) {
+        const filePart = key.slice(oldKeyPrefix.length);
+        newCheckboxStates[`${newId}:${filePart}`] = value;
+      } else {
+        newCheckboxStates[key] = value;
+      }
+    }
+    state.checkboxStates = newCheckboxStates;
+
+    writeState(state, statePath);
+
+    res.json({ project: newProject });
+  });
+
+  // POST /api/projects/:id/merge-subfolder
+  router.post('/:id/merge-subfolder', withProject, (req: Request, res: Response) => {
+    const { project: destProject } = req as ProjectRequest;
+    const { sourceProjectId, subfolderPath } = req.body as {
+      sourceProjectId?: string;
+      subfolderPath?: string;
+    };
+
+    if (!sourceProjectId || !subfolderPath) {
+      res.status(400).json({ error: 'sourceProjectId and subfolderPath are required' });
+      return;
+    }
+
+    const state = readState(statePath);
+    const sourceProject = state.projects.find((p) => p.id === sourceProjectId);
+    if (!sourceProject) {
+      res.status(404).json({ error: 'Source project not found' });
+      return;
+    }
+
+    const srcDir = path.join(sourceProject.path, subfolderPath);
+    if (!isPathWithinRoot(srcDir, sourceProject.path)) {
+      res.status(403).json({ error: 'Path traversal detected' });
+      return;
+    }
+
+    const folderName = path.basename(subfolderPath);
+    const destSubdir = path.join(destProject.path, folderName);
+
+    if (fs.existsSync(destSubdir)) {
+      res.status(409).json({ error: `Subfolder "${folderName}" already exists in destination` });
+      return;
+    }
+
+    try {
+      copyDirRecursive(srcDir, destSubdir, destProject.path);
+    } catch {
+      res.status(500).json({ error: 'Failed to copy files' });
+      return;
+    }
+
+    try {
+      fs.rmSync(srcDir, { recursive: true, force: true });
+    } catch {
+      // best effort
+    }
+
+    const prefix = subfolderPath + '/';
+    state.openTabs = state.openTabs.map((t) => {
+      if (t.projectId === sourceProjectId && t.filePath.startsWith(prefix)) {
+        return { projectId: destProject.id, filePath: `${folderName}/${t.filePath.slice(prefix.length)}` };
+      }
+      return t;
+    });
+
+    const newCheckboxStates: Record<string, Record<string, boolean>> = {};
+    const oldKeyPrefix = `${sourceProjectId}:${prefix}`;
+    for (const [key, value] of Object.entries(state.checkboxStates)) {
+      if (key.startsWith(oldKeyPrefix)) {
+        const filePart = key.slice(oldKeyPrefix.length);
+        newCheckboxStates[`${destProject.id}:${folderName}/${filePart}`] = value;
+      } else {
+        newCheckboxStates[key] = value;
+      }
+    }
+    state.checkboxStates = newCheckboxStates;
+
+    writeState(state, statePath);
+
+    res.json({ merged: true, subfolderName: folderName });
   });
 
   // POST /api/projects/:id/upload

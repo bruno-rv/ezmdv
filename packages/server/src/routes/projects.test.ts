@@ -5,7 +5,7 @@ import express from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { createProjectRoutes } from './projects.js';
-import { readState, writeState, type AppState } from '../state.js';
+import { readState, writeState, type AppState, type Project, type Tab } from '../state.js';
 
 const tempDirs: string[] = [];
 let app: express.Express;
@@ -577,6 +577,129 @@ describe('POST /api/projects/:id/merge-project', () => {
       .post(`/api/projects/${projectId}/merge-project`)
       .send({});
     expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/projects/:id/extract-subfolder', () => {
+  it('moves subfolder to a new upload project and remaps tabs', async () => {
+    const srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'src-'));
+    const subDir = path.join(srcDir, 'notes');
+    fs.mkdirSync(subDir);
+    fs.writeFileSync(path.join(subDir, 'file.md'), '# Hello');
+    const src: Project = { id: 'src1', name: 'Source', path: srcDir, source: 'cli', lastOpened: '' };
+
+    writeState({
+      projects: [src],
+      openTabs: [{ projectId: 'src1', filePath: 'notes/file.md' }],
+      checkboxStates: { 'src1:notes/file.md': { item: true } },
+      theme: 'light',
+      dismissedCliPaths: [],
+    }, statePath);
+
+    const res = await request(app)
+      .post('/api/projects/src1/extract-subfolder')
+      .send({ subfolderPath: 'notes' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.project.name).toBe('notes');
+
+    expect(fs.existsSync(subDir)).toBe(false);
+
+    const newPath = res.body.project.path as string;
+    expect(fs.existsSync(path.join(newPath, 'file.md'))).toBe(true);
+
+    const state = readState(statePath);
+    const newProject = state.projects.find((p: Project) => p.id === res.body.project.id);
+    expect(newProject).toBeDefined();
+    const remappedTab = state.openTabs.find((t: Tab) => t.projectId === res.body.project.id);
+    expect(remappedTab?.filePath).toBe('file.md');
+    expect(state.openTabs.find((t: Tab) => t.projectId === 'src1' && t.filePath === 'notes/file.md')).toBeUndefined();
+
+    const newKey = `${res.body.project.id}:file.md`;
+    expect(state.checkboxStates[newKey]).toEqual({ item: true });
+    expect(state.checkboxStates['src1:notes/file.md']).toBeUndefined();
+
+    fs.rmSync(srcDir, { recursive: true, force: true });
+    fs.rmSync(newPath, { recursive: true, force: true });
+  });
+
+  it('rejects path traversal', async () => {
+    const src: Project = { id: 'src2', name: 'Source', path: '/tmp/safe', source: 'cli', lastOpened: '' };
+    writeState({ projects: [src], openTabs: [], checkboxStates: {}, theme: 'light', dismissedCliPaths: [] }, statePath);
+    const res = await request(app)
+      .post('/api/projects/src2/extract-subfolder')
+      .send({ subfolderPath: '../escape' });
+    expect([403, 404]).toContain(res.status);
+  });
+
+  it('rejects non-directory path', async () => {
+    const srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'src-'));
+    fs.writeFileSync(path.join(srcDir, 'file.md'), '# hi');
+    const src: Project = { id: 'src3', name: 'Source', path: srcDir, source: 'cli', lastOpened: '' };
+    writeState({ projects: [src], openTabs: [], checkboxStates: {}, theme: 'light', dismissedCliPaths: [] }, statePath);
+    const res = await request(app)
+      .post('/api/projects/src3/extract-subfolder')
+      .send({ subfolderPath: 'file.md' });
+    expect(res.status).toBe(400);
+    fs.rmSync(srcDir, { recursive: true, force: true });
+  });
+});
+
+describe('POST /api/projects/:id/merge-subfolder', () => {
+  it('moves subfolder into destination project and remaps tabs', async () => {
+    const srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'src-'));
+    const destDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dest-'));
+    const subDir = path.join(srcDir, 'notes');
+    fs.mkdirSync(subDir);
+    fs.writeFileSync(path.join(subDir, 'a.md'), '# A');
+
+    const src: Project = { id: 'msrc1', name: 'Source', path: srcDir, source: 'cli', lastOpened: '' };
+    const dest: Project = { id: 'mdst1', name: 'Dest', path: destDir, source: 'cli', lastOpened: '' };
+    writeState({
+      projects: [src, dest],
+      openTabs: [{ projectId: 'msrc1', filePath: 'notes/a.md' }],
+      checkboxStates: { 'msrc1:notes/a.md': { cb: true } },
+      theme: 'light',
+      dismissedCliPaths: [],
+    }, statePath);
+
+    const res = await request(app)
+      .post('/api/projects/mdst1/merge-subfolder')
+      .send({ sourceProjectId: 'msrc1', subfolderPath: 'notes' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.merged).toBe(true);
+    expect(res.body.subfolderName).toBe('notes');
+
+    expect(fs.existsSync(path.join(destDir, 'notes', 'a.md'))).toBe(true);
+    expect(fs.existsSync(subDir)).toBe(false);
+
+    const state = readState(statePath);
+    expect(state.openTabs.find((t: Tab) => t.projectId === 'mdst1' && t.filePath === 'notes/a.md')).toBeDefined();
+    expect(state.openTabs.find((t: Tab) => t.projectId === 'msrc1')).toBeUndefined();
+    expect(state.checkboxStates['mdst1:notes/a.md']).toEqual({ cb: true });
+    expect(state.checkboxStates['msrc1:notes/a.md']).toBeUndefined();
+
+    fs.rmSync(srcDir, { recursive: true, force: true });
+    fs.rmSync(destDir, { recursive: true, force: true });
+  });
+
+  it('rejects when destination already has a folder with the same name', async () => {
+    const srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'src-'));
+    const destDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dest-'));
+    fs.mkdirSync(path.join(srcDir, 'notes'));
+    fs.mkdirSync(path.join(destDir, 'notes'));
+    const src: Project = { id: 'msrc2', name: 'Src', path: srcDir, source: 'cli', lastOpened: '' };
+    const dest: Project = { id: 'mdst2', name: 'Dst', path: destDir, source: 'cli', lastOpened: '' };
+    writeState({ projects: [src, dest], openTabs: [], checkboxStates: {}, theme: 'light', dismissedCliPaths: [] }, statePath);
+
+    const res = await request(app)
+      .post('/api/projects/mdst2/merge-subfolder')
+      .send({ sourceProjectId: 'msrc2', subfolderPath: 'notes' });
+
+    expect(res.status).toBe(409);
+    fs.rmSync(srcDir, { recursive: true, force: true });
+    fs.rmSync(destDir, { recursive: true, force: true });
   });
 });
 
