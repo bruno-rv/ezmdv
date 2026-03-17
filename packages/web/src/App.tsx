@@ -85,6 +85,8 @@ function App() {
     moveFileBetweenProjects,
     createProjectFolder,
     mergeProject,
+    extractSubfolder,
+    mergeSubfolder,
   } = useProjects();
   const {
     tabs,
@@ -603,6 +605,24 @@ function App() {
     [closeProjectTabs, graphProjectId, mergeProject, projects],
   );
 
+  const handleMergeSubfolder = useCallback(
+    (destProjectId: string, sourceProjectId: string, folderPath: string) => {
+      mergeSubfolder(destProjectId, sourceProjectId, folderPath).catch((error) => {
+        alert(error instanceof Error ? error.message : 'Merge subfolder failed.');
+      });
+    },
+    [mergeSubfolder],
+  );
+
+  const handleExtractSubfolder = useCallback(
+    (sourceProjectId: string, folderPath: string) => {
+      extractSubfolder(sourceProjectId, folderPath).catch((error) => {
+        alert(error instanceof Error ? error.message : 'Extract subfolder failed.');
+      });
+    },
+    [extractSubfolder],
+  );
+
   const handleCreateFolder = useCallback(
     async (projectId: string, folderPath: string) => {
       try {
@@ -1038,6 +1058,8 @@ function App() {
           onUploadToProject={handleUploadToProject}
           onMoveFile={handleMoveFile}
           onMergeProject={handleMergeProject}
+          onMergeSubfolder={handleMergeSubfolder}
+          onExtractSubfolder={handleExtractSubfolder}
           onCreateFolder={handleCreateFolder}
           autoExpandProjectId={autoExpandProjectId}
           isOpen={sidebarOpen}
