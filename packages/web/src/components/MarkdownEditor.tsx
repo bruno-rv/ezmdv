@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { EditorView, keymap, type ViewUpdate } from '@codemirror/view';
+import { EditorView, type ViewUpdate } from '@codemirror/view';
 import { Prec } from '@codemirror/state';
 import { autocompletion } from '@codemirror/autocomplete';
 import { search } from '@codemirror/search';
@@ -99,11 +99,11 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
       search({ top: true }),
       hrAutoFormat(),
       slashMenuField,
-      Prec.highest(keymap.of([{
-        any(view: EditorView, event: KeyboardEvent) {
+      Prec.highest(EditorView.domEventHandlers({
+        keydown(event: KeyboardEvent, view: EditorView) {
           return slashCommandKeymap(view, event);
         },
-      }])),
+      })),
       EditorView.domEventHandlers({
         ...(projectId
           ? {
