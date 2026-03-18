@@ -20,9 +20,11 @@ It is a monorepo with three packages:
 
 - Open a markdown project from the CLI or upload files directly in the browser
 - Browse markdown files in a sidebar tree
-- Create new `.md` files in-app with inline naming
+- Create new `.md` files in-app with inline naming — new files auto-open in edit mode
 - Preview rendered markdown with code highlighting, Mermaid diagrams, KaTeX math, footnotes, and collapsible sections
-- Edit markdown in-app with CodeMirror 6 and save changes
+- Edit markdown in-app with CodeMirror 6 and save changes — Escape auto-saves and returns to view mode
+- Slash commands (`/`) in the editor for quick markdown insertion (headings, lists, code blocks, tables, and more)
+- Copy-to-clipboard buttons on code blocks and tables
 - Obsidian-style `[[wiki-links]]` with autocomplete while editing
 - Open two markdown files side by side for reading
 - Fullscreen a markdown pane
@@ -137,14 +139,14 @@ Open `http://localhost:5173` — changes hot-reload instantly via Vite HMR.
 
 ## Tests
 
-165 tests across 16 files using Vitest:
+197 tests across 20 files using Vitest:
 
 ```bash
 npm test
 ```
 
-- **Server** (100 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, subfolder extraction, subfolder merge, fuzzy search (trigrams, stemming, scoring), zoom level persistence
-- **Web** (65 tests, 10 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom, ExpandedProjectContent component, GlobalSearch component
+- **Server** (104 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, subfolder extraction, subfolder merge, fuzzy search (trigrams, stemming, scoring), zoom level persistence, backlinks
+- **Web** (93 tests, 14 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom, ExpandedProjectContent component, GlobalSearch component, command palette, backlinks panel, table of contents, templates, slash commands
 
 ## Local Data
 
