@@ -2,7 +2,6 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   ChevronRight,
   ChevronDown,
-  File,
   FolderOpen,
   Upload,
   Trash2,
@@ -15,6 +14,15 @@ import {
   PanelLeftOpen,
   Keyboard,
   FolderPlus,
+  FolderTree,
+  Search,
+  Waypoints,
+  LayoutGrid,
+  MoreVertical,
+  FilePlus,
+  HardDrive,
+  Terminal,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -88,6 +96,9 @@ export function Sidebar({
       ? window.matchMedia('(min-width: 768px)').matches
       : true,
   );
+  const [sidebarMode, setSidebarMode] = useState<'explorer' | 'search' | 'graph' | 'layout'>('explorer');
+  const [projectMenuId, setProjectMenuId] = useState<string | null>(null);
+  const projectMenuRef = useRef<HTMLDivElement>(null);
   const [expandedProjects, setExpandedProjects] = useState<
     Record<string, boolean>
   >({});
@@ -176,6 +187,17 @@ export function Sidebar({
     document.addEventListener('dragend', reset);
     return () => document.removeEventListener('dragend', reset);
   }, []);
+
+  useEffect(() => {
+    if (!projectMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (projectMenuRef.current && !projectMenuRef.current.contains(e.target as Node)) {
+        setProjectMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [projectMenuId]);
 
   const toggleProject = useCallback(
     (projectId: string) => {
@@ -285,6 +307,7 @@ export function Sidebar({
         )}
         style={effectiveCollapsed ? undefined : { width: `${sidebarWidth}px` }}
       >
+        {/* Project header */}
         <div
           className={cn(
             'flex items-center border-b border-border px-3 py-3',
@@ -293,7 +316,7 @@ export function Sidebar({
         >
           <div
             className={cn(
-              'flex items-center gap-2',
+              'flex items-center gap-2.5',
               effectiveCollapsed && 'md:flex-col',
             )}
           >
@@ -309,15 +332,20 @@ export function Sidebar({
                 <PanelLeftOpen className="size-4" />
               </Button>
             )}
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <File className="size-4" />
+            <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <HardDrive className="size-4" />
             </div>
             <div className={cn(effectiveCollapsed && 'md:hidden')}>
-              <h1 className="text-lg font-bold tracking-tight">ezmdv</h1>
+              <h1 className="text-sm font-semibold leading-tight">
+                {projects.length === 1 ? projects[0].name : 'ezmdv'}
+              </h1>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {projects.length === 1 && projects[0].source === 'cli' ? 'CLI' : 'Local Storage'}
+              </p>
             </div>
           </div>
 
-          <div className={cn('flex items-center gap-1', effectiveCollapsed && 'md:flex-col')}>
+          <div className={cn('flex items-center gap-0.5', effectiveCollapsed && 'md:flex-col')}>
             {!effectiveCollapsed && (
               <Button
                 variant="ghost"
@@ -340,42 +368,47 @@ export function Sidebar({
             >
               <X className="size-4" />
             </Button>
-            {!effectiveCollapsed && !selectMode && projects.length > 0 && (
+            {!effectiveCollapsed && (
               <Button
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => setSelectMode(true)}
-                title="Select projects"
+                onClick={onShowShortcuts}
+                aria-label="Keyboard shortcuts"
+                title="Keyboard shortcuts"
               >
-                <ListChecks className="size-4" />
+                <Keyboard className="size-4" />
               </Button>
             )}
-            {!effectiveCollapsed && onCreateProject && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => {
-                  const name = window.prompt('Project name:');
-                  if (name?.trim()) onCreateProject(name.trim());
-                }}
-                aria-label="Create new project"
-                title="Create new project"
-              >
-                <FolderPlus className="size-4" />
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={onShowShortcuts}
-              aria-label="Keyboard shortcuts"
-              title="Keyboard shortcuts"
-            >
-              <Keyboard className="size-4" />
-            </Button>
             <ThemeToggle theme={theme} onToggle={onThemeToggle} />
           </div>
         </div>
+
+        {/* Icon tab bar */}
+        {!effectiveCollapsed && (
+          <div className="flex items-center gap-1 border-b border-border px-3 py-2">
+            {([
+              { mode: 'explorer' as const, icon: FolderTree, label: 'Explorer' },
+              { mode: 'search' as const, icon: Search, label: 'Search' },
+              { mode: 'graph' as const, icon: Waypoints, label: 'Graph' },
+              { mode: 'layout' as const, icon: LayoutGrid, label: 'Layout' },
+            ] as const).map(({ mode, icon: Icon, label }) => (
+              <button
+                key={mode}
+                className={cn(
+                  'flex-1 flex items-center justify-center rounded-md p-2 transition-colors',
+                  sidebarMode === mode
+                    ? 'bg-primary/15 text-primary'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+                )}
+                onClick={() => setSidebarMode(mode)}
+                title={label}
+                aria-label={label}
+              >
+                <Icon className="size-4" />
+              </button>
+            ))}
+          </div>
+        )}
 
         {effectiveCollapsed ? (
           <div className="hidden flex-1 items-center justify-center md:flex">
@@ -386,6 +419,96 @@ export function Sidebar({
             >
               <PanelLeftOpen className="size-4" />
             </button>
+          </div>
+        ) : sidebarMode === 'search' ? (
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <div className="px-4 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Search</span>
+            </div>
+            <div className="pt-1">
+              <GlobalSearch onFilterChange={setGlobalFilter} />
+            </div>
+            {globalFilter && globalFilter.size > 0 && (
+              <div className="flex-1 overflow-y-auto px-2 py-2">
+                {projects
+                  .filter((p) => globalFilter.has(p.id))
+                  .map((project) => (
+                    <div key={project.id} className="mb-1">
+                      <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-muted-foreground">
+                        <FolderTree className="size-3" />
+                        <span>{project.name}</span>
+                      </div>
+                      <div className="ml-1">
+                        <ExpandedProjectContent
+                          project={project}
+                          activeTab={activeTab}
+                          onFileClick={onFileClick}
+                          onOpenGraph={onOpenGraph}
+                          onCreateFile={onCreateFile}
+                          onCreateFolder={onCreateFolder}
+                          onDeleteFile={onDeleteFile}
+                          onUploadToProject={onUploadToProject}
+                          globalFilter={globalFilter?.get(project.id)}
+                          draggable={!!onMoveFile}
+                          onFolderDragStart={() => setIsFolderDragging(true)}
+                          onFolderDragEnd={() => {
+                            setIsFolderDragging(false);
+                            setExtractDropActive(false);
+                            extractDropCounter.current = 0;
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+            {globalFilter && globalFilter.size === 0 && (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">No matching files found</p>
+            )}
+          </div>
+        ) : sidebarMode === 'graph' ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
+            <Waypoints className="size-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Select a project to view its graph</p>
+            <div className="flex w-full flex-col gap-1">
+              {projects.map((project) => (
+                <button
+                  key={project.id}
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  onClick={() => onOpenGraph(project.id)}
+                >
+                  <Waypoints className="size-3.5" />
+                  <span className="truncate">{project.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : sidebarMode === 'layout' ? (
+          <div className="flex flex-1 flex-col gap-3 px-4 py-4">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Layout</span>
+            <div className="flex flex-col gap-1">
+              {!selectMode && projects.length > 0 && (
+                <button
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  onClick={() => setSelectMode(true)}
+                >
+                  <ListChecks className="size-4" />
+                  <span>Select projects</span>
+                </button>
+              )}
+              {onCreateProject && (
+                <button
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  onClick={() => {
+                    const name = window.prompt('Project name:');
+                    if (name?.trim()) onCreateProject(name.trim());
+                  }}
+                >
+                  <FolderPlus className="size-4" />
+                  <span>New project</span>
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <>
@@ -415,8 +538,8 @@ export function Sidebar({
               </div>
             )}
 
-            <div className="pt-2">
-              <GlobalSearch onFilterChange={setGlobalFilter} />
+            <div className="px-4 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Explorer</span>
             </div>
 
             <div className="flex-1 overflow-y-auto px-2 py-2">
@@ -571,32 +694,61 @@ export function Sidebar({
                               )}
                               <span className="truncate">{project.name}</span>
                             </button>
-                            <button
-                              className="mr-1 shrink-0 rounded p-1 opacity-0 transition-all hover:bg-muted/80 group-hover/project:opacity-100 focus-visible:opacity-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                startRename(project.id, project.name);
-                              }}
-                              aria-label={`Rename project ${project.name}`}
-                            >
-                              <Pencil className="size-3" />
-                            </button>
-                            <button
-                              className="mr-1 shrink-0 rounded p-1 opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover/project:opacity-100 focus-visible:opacity-100"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (
-                                  window.confirm(
-                                    `Delete project "${project.name}"?${project.source === 'upload' ? ' Uploaded files will be permanently deleted.' : ''}`,
-                                  )
-                                ) {
-                                  onDeleteProject(project.id);
-                                }
-                              }}
-                              aria-label={`Delete project ${project.name}`}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </button>
+                            <div className="relative" ref={projectMenuId === project.id ? projectMenuRef : undefined}>
+                              <button
+                                className="mr-1 shrink-0 rounded p-1 opacity-0 transition-all hover:bg-muted/80 group-hover/project:opacity-100 focus-visible:opacity-100"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setProjectMenuId(projectMenuId === project.id ? null : project.id);
+                                }}
+                                aria-label={`Project actions for ${project.name}`}
+                              >
+                                <MoreVertical className="size-3.5" />
+                              </button>
+                              {projectMenuId === project.id && (
+                                <div className="absolute right-0 top-full z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover py-1 text-sm shadow-md">
+                                  <button
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-popover-foreground transition-colors hover:bg-muted/50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProjectMenuId(null);
+                                      startRename(project.id, project.name);
+                                    }}
+                                  >
+                                    <Pencil className="size-3" />
+                                    Rename
+                                  </button>
+                                  <button
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-popover-foreground transition-colors hover:bg-muted/50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProjectMenuId(null);
+                                      onOpenGraph(project.id);
+                                    }}
+                                  >
+                                    <Waypoints className="size-3" />
+                                    Open Graph
+                                  </button>
+                                  <button
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-destructive transition-colors hover:bg-destructive/10"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProjectMenuId(null);
+                                      if (
+                                        window.confirm(
+                                          `Delete project "${project.name}"?${project.source === 'upload' ? ' Uploaded files will be permanently deleted.' : ''}`,
+                                        )
+                                      ) {
+                                        onDeleteProject(project.id);
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="size-3" />
+                                    Delete
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </>
                         )}
                       </div>
@@ -696,15 +848,38 @@ export function Sidebar({
                 </Button>
               </div>
             ) : !selectMode ? (
-              <div className="border-t border-border p-3">
+              <div className="flex flex-col gap-2 border-t border-border p-3">
                 <Button
                   variant="outline"
-                  className="w-full justify-start gap-2"
+                  className="w-full justify-center gap-2 text-xs font-semibold uppercase tracking-wider"
+                  onClick={() => {
+                    const activeProject = projects.find((p) =>
+                      expandedProjects[p.id],
+                    );
+                    if (activeProject) {
+                      const name = window.prompt('File name (without .md):');
+                      if (name?.trim()) {
+                        onCreateFile(activeProject.id, name.trim() + '.md');
+                      }
+                    } else if (projects.length > 0) {
+                      toggleProject(projects[0].id);
+                      const name = window.prompt('File name (without .md):');
+                      if (name?.trim()) {
+                        onCreateFile(projects[0].id, name.trim() + '.md');
+                      }
+                    }
+                  }}
+                >
+                  <FilePlus className="size-4" />
+                  New File
+                </Button>
+                <button
+                  className="flex w-full items-center justify-center gap-1.5 rounded-md py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Upload className="size-4" />
-                  Upload
-                </Button>
+                  <Upload className="size-3" />
+                  Upload files
+                </button>
 
                 <input
                   ref={fileInputRef}

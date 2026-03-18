@@ -9,6 +9,8 @@ import { PaneToolbar } from '@/components/PaneToolbar';
 import { Button } from '@/components/ui/button';
 import { Sidebar } from '@/components/Sidebar';
 import { TabBar } from '@/components/TabBar';
+import { TopHeader } from '@/components/TopHeader';
+import { StatusBar } from '@/components/StatusBar';
 import { MarkdownView } from '@/components/MarkdownView';
 import { TableOfContents, type TocHeading } from '@/components/TableOfContents';
 import { FileMetaTooltip } from '@/components/FileMetaTooltip';
@@ -1104,6 +1106,8 @@ function App() {
 
   const showSidebar = fullscreenPane === null;
   const showTopChrome = fullscreenPane === null;
+  const appMode = graphProjectId ? 'visualize' as const : 'edit' as const;
+  const activeZoom = activeTab ? getZoom(activeTab.projectId, activeTab.filePath) : 1;
   const fullscreenTarget = fullscreenPane ? getPaneTab(fullscreenPane) : null;
   const graphProject = graphProjectId
     ? projects.find((project) => project.id === graphProjectId) ?? null
@@ -1121,7 +1125,7 @@ function App() {
   return (
     <div
       className={cn(
-        'relative flex h-screen overflow-hidden bg-background text-foreground transition-colors duration-200',
+        'relative flex h-screen flex-col overflow-hidden bg-background text-foreground transition-colors duration-200',
         dragOver && 'ring-2 ring-inset ring-primary/50',
       )}
       onDragEnter={(e) => {
@@ -1159,6 +1163,26 @@ function App() {
         }
       }}
     >
+      {showTopChrome && (
+        <TopHeader
+          mode={appMode}
+          onModeChange={(mode) => {
+            if (mode === 'visualize') {
+              const projectId = activeTab?.projectId ?? projects[0]?.id;
+              if (projectId) handleOpenGraph(projectId);
+            } else {
+              setGraphProjectId(null);
+            }
+          }}
+          zoom={activeZoom}
+          onSearchClick={() => setCommandPaletteOpen(true)}
+          onSettingsClick={() => setShowShortcuts(true)}
+          onMenuClick={() => setSidebarOpen(true)}
+          showMenu={showSidebar}
+        />
+      )}
+
+      <div className="flex min-h-0 flex-1">
       {showSidebar && (
         <Sidebar
           projects={projects}
@@ -1192,20 +1216,6 @@ function App() {
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        {showTopChrome && (
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2 md:hidden">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Open sidebar"
-            >
-              <Menu className="size-5" />
-            </Button>
-            <span className="text-sm font-semibold">ezmdv</span>
-          </div>
-        )}
-
         {showTopChrome && (
           <TabBar
             tabs={tabs}
@@ -1279,7 +1289,18 @@ function App() {
             <p className="text-sm text-muted-foreground">Select a file to view</p>
           </div>
         )}
+
+        {showTopChrome && (
+          <StatusBar
+            connected={true}
+            editMode={editMode}
+            splitView={splitView}
+            content={primaryContent}
+            filePath={activeTab?.filePath ?? null}
+          />
+        )}
       </main>
+      </div>
       {showShortcuts && (
         <ShortcutsModal
           onClose={() => setShowShortcuts(false)}

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { X, Search, ZoomIn, ZoomOut, RotateCcw, Minus, Maximize2, Minimize2 } from 'lucide-react';
+import { X, Search, ZoomIn, ZoomOut, RotateCcw, Minus, Maximize2, Minimize2, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ProjectGraph, GraphNode, GraphEdge } from '@/lib/api';
 import { fetchFileContent, searchProjectContent } from '@/lib/api';
@@ -658,6 +658,43 @@ export function GraphPanel({
             >
               <RotateCcw className="size-3.5" />
             </Button>
+          </div>
+
+          {/* Stats card */}
+          <div className="absolute bottom-4 left-4 rounded-lg border border-border bg-card/80 backdrop-blur px-4 py-3 shadow-lg">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Connected Nodes</p>
+            <p className="text-xl font-bold text-foreground">{graph?.nodes.length ?? 0}</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Files</p>
+          </div>
+
+          {/* Display Engine panel */}
+          <div className="absolute bottom-4 right-4 w-64 rounded-lg border border-border bg-card/80 backdrop-blur p-4 shadow-lg">
+            <div className="mb-3 flex items-center gap-2">
+              <SlidersHorizontal className="size-4 text-muted-foreground" />
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Display Engine</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Gravity</span>
+                <span className="text-xs font-medium text-foreground">0.45</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Link Distance</span>
+                <span className="text-xs font-medium text-foreground">280px</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Repulsion</span>
+                <span className="text-xs font-medium text-foreground">1.2k</span>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={handleZoomReset}>
+                Reset View
+              </Button>
+              <Button size="sm" className="flex-1 bg-primary text-primary-foreground text-xs">
+                Export SVG
+              </Button>
+            </div>
           </div>
         </div>
       )}

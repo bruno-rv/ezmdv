@@ -40,6 +40,7 @@ export function FileTreeNode({
   const [expanded, setExpanded] = useState(false);
   const [creatingSubfolder, setCreatingSubfolder] = useState(false);
   const [subfolderName, setSubfolderName] = useState('');
+  const [dragOver, setDragOver] = useState(false);
   const subfolderInputRef = useRef<HTMLInputElement>(null);
 
   const isActive =
@@ -95,6 +96,16 @@ export function FileTreeNode({
           onFolderDragStart?.();
         }}
         onDragEnd={() => onFolderDragEnd?.()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.stopPropagation();
+          setDragOver(false);
+        }}
+        onDrop={() => setDragOver(false)}
       >
         <div className="group flex items-center">
           <button
@@ -113,6 +124,11 @@ export function FileTreeNode({
               <FolderClosed className="size-3.5 shrink-0 text-amber-500" />
             )}
             <span className="truncate">{entry.name}</span>
+            {dragOver && (
+              <span className="rounded bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase text-primary-foreground">
+                DROP
+              </span>
+            )}
           </button>
         </div>
         {expanded && entry.children && (

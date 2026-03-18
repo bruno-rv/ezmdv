@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AutoScrollControls } from '@/components/AutoScrollControls';
+import { ModeToggle } from '@/components/ModeToggle';
 import { cn } from '@/lib/utils';
 
 interface ToolbarGroupProps {
@@ -197,10 +198,25 @@ export function PaneToolbar(props: PaneToolbarProps) {
         </span>
       )}
 
-      {/* File path */}
-      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-        {filePath}
+      {/* File badge */}
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="truncate max-w-[200px]">{filePath.split('/').pop()}</span>
       </span>
+
+      <span className="min-w-0 flex-1" />
+
+      {/* Mode toggle */}
+      {!splitContext && !isFullscreen && (
+        <ModeToggle
+          mode={editMode ? 'edit' : splitContext ? 'split' : 'raw'}
+          onModeChange={(mode) => {
+            if (mode === 'edit') onEdit();
+            else if (mode === 'split') onSplitView();
+            else if (editMode) onSaveAndPreview();
+          }}
+          editDisabled={previewOnly}
+        />
+      )}
 
       {/* Right side: grouped icons - hidden until hover */}
       <div className="flex items-center gap-1 opacity-0 group-hover/toolbar:opacity-100 transition-opacity duration-200">
