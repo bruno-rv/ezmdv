@@ -758,3 +758,31 @@ describe('GET /api/projects/:id/backlinks', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('DELETE /api/projects/:id/files/*', () => {
+  it('deletes a file', async () => {
+    expect(fs.existsSync(path.join(projectDir, 'readme.md'))).toBe(true);
+    const res = await request(app).delete(`/api/projects/${projectId}/files/readme.md`);
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe('readme.md');
+    expect(fs.existsSync(path.join(projectDir, 'readme.md'))).toBe(false);
+  });
+
+  it('deletes a folder recursively', async () => {
+    expect(fs.existsSync(path.join(projectDir, 'docs', 'guide.md'))).toBe(true);
+    const res = await request(app).delete(`/api/projects/${projectId}/files/docs`);
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe('docs');
+    expect(fs.existsSync(path.join(projectDir, 'docs'))).toBe(false);
+  });
+
+  it('returns 404 for non-existent path', async () => {
+    const res = await request(app).delete(`/api/projects/${projectId}/files/nope.md`);
+    expect(res.status).toBe(404);
+  });
+
+  it('rejects path traversal', async () => {
+    const res = await request(app).delete(`/api/projects/${projectId}/files/../../../etc/passwd`);
+    expect([403, 404]).toContain(res.status);
+  });
+});

@@ -8,6 +8,7 @@ import {
   renameProject as apiRenameProject,
   moveFile,
   createFolder,
+  deleteFile as apiDeleteFile,
   mergeProjectInto,
   extractSubfolder as extractSubfolderApi,
   mergeSubfolderInto,
@@ -133,6 +134,14 @@ export function useProjects() {
     [loadProjectFiles],
   );
 
+  const deleteProjectFile = useCallback(
+    async (projectId: string, filePath: string) => {
+      await apiDeleteFile(projectId, filePath);
+      await loadProjectFiles(projectId);
+    },
+    [loadProjectFiles],
+  );
+
   const mergeProject = useCallback(
     async (
       destProjectId: string,
@@ -193,6 +202,7 @@ export function useProjects() {
     uploadToProject,
     moveFileBetweenProjects,
     createProjectFolder,
+    deleteProjectFile,
     mergeProject,
     extractSubfolder,
     mergeSubfolder,

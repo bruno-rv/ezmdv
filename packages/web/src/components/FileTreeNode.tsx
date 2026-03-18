@@ -6,8 +6,10 @@ import {
   FolderOpen,
   FolderClosed,
   FolderPlus,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { FileTreeContextMenu } from '@/components/FileTreeContextMenu';
 import type { Tab, FileTreeEntry } from '@/lib/api';
 
 interface FileTreeNodeProps {
@@ -17,6 +19,7 @@ interface FileTreeNodeProps {
   depth: number;
   onFileClick: (projectId: string, filePath: string) => void;
   onCreateFolder?: (projectId: string, folderPath: string) => void;
+  onDeleteFile?: (projectId: string, filePath: string) => void;
   draggable?: boolean;
   onFolderDragStart?: () => void;
   onFolderDragEnd?: () => void;
@@ -29,6 +32,7 @@ export function FileTreeNode({
   depth,
   onFileClick,
   onCreateFolder,
+  onDeleteFile,
   draggable,
   onFolderDragStart,
   onFolderDragEnd,
@@ -53,7 +57,33 @@ export function FileTreeNode({
   }
 
   if (entry.type === 'directory') {
-    return (
+    const menuItems = [];
+    if (onCreateFolder) {
+      menuItems.push({
+        label: 'New subfolder',
+        icon: <FolderPlus className="size-3.5" />,
+        onClick: () => {
+          setExpanded(true);
+          setCreatingSubfolder(true);
+          setSubfolderName('');
+          setTimeout(() => subfolderInputRef.current?.focus(), 0);
+        },
+      });
+    }
+    if (onDeleteFile) {
+      menuItems.push({
+        label: 'Delete folder',
+        icon: <Trash2 className="size-3.5" />,
+        danger: true,
+        onClick: () => {
+          if (window.confirm(`Delete folder "${entry.name}" and all its contents?`)) {
+            onDeleteFile(projectId, entry.path);
+          }
+        },
+      });
+    }
+
+    const dirContent = (
       <div
         draggable
         onDragStart={(e) => {
@@ -84,21 +114,6 @@ export function FileTreeNode({
             )}
             <span className="truncate">{entry.name}</span>
           </button>
-          {onCreateFolder && (
-            <button
-              className="mr-1 shrink-0 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-              title="Create subfolder"
-              onClick={(e) => {
-                e.stopPropagation();
-                setExpanded(true);
-                setCreatingSubfolder(true);
-                setSubfolderName('');
-                setTimeout(() => subfolderInputRef.current?.focus(), 0);
-              }}
-            >
-              <FolderPlus className="size-3.5" />
-            </button>
-          )}
         </div>
         {expanded && entry.children && (
           <div>
@@ -111,6 +126,7 @@ export function FileTreeNode({
                 depth={depth + 1}
                 onFileClick={onFileClick}
                 onCreateFolder={onCreateFolder}
+                onDeleteFile={onDeleteFile}
                 draggable={draggable}
                 onFolderDragStart={onFolderDragStart}
                 onFolderDragEnd={onFolderDragEnd}
@@ -145,9 +161,15 @@ export function FileTreeNode({
         )}
       </div>
     );
+
+    return menuItems.length > 0 ? (
+      <FileTreeContextMenu items={menuItems}>{dirContent}</FileTreeContextMenu>
+    ) : (
+      dirContent
+    );
   }
 
-  return (
+  const fileContent = (
     <button
       className={cn(
         'flex w-full items-center gap-1.5 rounded px-2 py-1 text-sm transition-colors',
@@ -170,4 +192,27 @@ export function FileTreeNode({
       <span className="truncate">{entry.name}</span>
     </button>
   );
+
+  if (onDeleteFile) {
+    return (
+      <FileTreeContextMenu
+        items={[
+          {
+            label: 'Delete file',
+            icon: <Trash2 className="size-3.5" />,
+            danger: true,
+            onClick: () => {
+              if (window.confirm(`Delete "${entry.name}"? This cannot be undone.`)) {
+                onDeleteFile(projectId, entry.path);
+              }
+            },
+          },
+        ]}
+      >
+        {fileContent}
+      </FileTreeContextMenu>
+    );
+  }
+
+  return fileContent;
 }

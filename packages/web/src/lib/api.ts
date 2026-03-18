@@ -206,6 +206,15 @@ export async function deleteProject(
   });
 }
 
+export async function deleteFile(
+  projectId: string,
+  filePath: string,
+): Promise<void> {
+  await request(`/api/projects/${projectId}/files/${encodeFilePath(filePath)}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function createFile(
   projectId: string,
   filePath: string,

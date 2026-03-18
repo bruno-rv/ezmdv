@@ -42,6 +42,7 @@ interface SidebarProps {
   onMergeSubfolder?: (destProjectId: string, sourceProjectId: string, folderPath: string) => void;
   onExtractSubfolder?: (sourceProjectId: string, folderPath: string) => void;
   onCreateFolder?: (projectId: string, folderPath: string) => void;
+  onDeleteFile?: (projectId: string, filePath: string) => void;
   autoExpandProjectId: string | null;
   isOpen: boolean;
   collapsed: boolean;
@@ -71,6 +72,7 @@ export function Sidebar({
   onMergeSubfolder,
   onExtractSubfolder,
   onCreateFolder,
+  onDeleteFile,
   autoExpandProjectId,
   isOpen,
   collapsed,
@@ -582,6 +584,7 @@ export function Sidebar({
                             onOpenGraph={onOpenGraph}
                             onCreateFile={onCreateFile}
                             onCreateFolder={onCreateFolder}
+                            onDeleteFile={onDeleteFile}
                             onUploadToProject={onUploadToProject}
                             globalFilter={globalFilter?.get(project.id)}
                             draggable={!!onMoveFile}
