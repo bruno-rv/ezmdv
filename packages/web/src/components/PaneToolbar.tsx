@@ -206,15 +206,18 @@ export function PaneToolbar(props: PaneToolbarProps) {
       <span className="min-w-0 flex-1" />
 
       {/* Mode toggle */}
-      {!splitContext && !isFullscreen && (
+      {!isFullscreen && (
         <ModeToggle
           mode={editMode ? 'edit' : splitContext ? 'split' : 'raw'}
           onModeChange={(mode) => {
             if (mode === 'edit') onEdit();
             else if (mode === 'split') onSplitView();
-            else if (editMode) onSaveAndPreview();
+            else if (mode === 'raw') {
+              if (editMode) onSaveAndPreview();
+              else if (splitContext) onCloseSplit();
+            }
           }}
-          editDisabled={previewOnly}
+          editDisabled={previewOnly || splitContext}
         />
       )}
 
