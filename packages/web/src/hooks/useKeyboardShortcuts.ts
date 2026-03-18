@@ -58,7 +58,7 @@ export function useKeyboardShortcuts({
     function handleKeyDown(e: KeyboardEvent) {
       if (showShortcuts) return;
 
-      // Non-customizable: Escape closes graph preview or exits fullscreen
+      // Non-customizable: Escape closes graph preview, exits fullscreen, or exits edit mode
       if (e.key === 'Escape' && graphPreview) {
         setGraphPreview(null);
         return;
@@ -66,6 +66,11 @@ export function useKeyboardShortcuts({
       if (e.key === 'Escape' && fullscreenPane) {
         e.preventDefault();
         setFullscreenPane(null);
+        return;
+      }
+      if (e.key === 'Escape' && editMode && !e.defaultPrevented) {
+        e.preventDefault();
+        handleExitEdit();
         return;
       }
 

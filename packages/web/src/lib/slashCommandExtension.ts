@@ -1,5 +1,5 @@
 import { StateField, StateEffect } from '@codemirror/state';
-import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { slashCommands, type SlashCommand } from './slashCommands';
 
 export interface SlashMenuState {
@@ -106,49 +106,37 @@ export function slashCommandKeymap(view: EditorView, event: KeyboardEvent): bool
   }
   if (event.key === 'Escape') {
     event.preventDefault();
+    event.stopPropagation();
     view.dispatch({ effects: closeSlashMenu.of(undefined) });
     return true;
   }
   return false;
 }
 
-export const slashCommandPlugin = ViewPlugin.fromClass(
-  class {
-    update(update: ViewUpdate) {
-      if (!update.docChanged && !update.selectionSet) return;
+export function detectSlashMenu(view: EditorView): SlashMenuState | null {
+  const { state } = view;
+  const pos = state.selection.main.head;
+  const line = state.doc.lineAt(pos);
+  const textBefore = line.text.slice(0, pos - line.from);
+  const slashMatch = textBefore.match(/(?:^|\s)\/([\w]*)$/);
 
-      const { state } = update.view;
-      const pos = state.selection.main.head;
-      const line = state.doc.lineAt(pos);
-      const textBefore = line.text.slice(0, pos - line.from);
-
-      const slashMatch = textBefore.match(/(?:^|\s)\/([\w]*)$/);
-
-      if (slashMatch) {
-        const slashPos = line.from + textBefore.lastIndexOf('/');
-        const query = slashMatch[1];
-        const coords = update.view.coordsAtPos(pos);
-        if (coords) {
-          const editorRect = update.view.dom.getBoundingClientRect();
-          update.view.dispatch({
-            effects: setSlashMenu.of({
-              open: true,
-              query,
-              from: slashPos,
-              selectedIndex: 0,
-              position: {
-                top: coords.bottom - editorRect.top,
-                left: coords.left - editorRect.left,
-              },
-            }),
-          });
-        }
-      } else {
-        const current = state.field(slashMenuField);
-        if (current.open) {
-          update.view.dispatch({ effects: closeSlashMenu.of(undefined) });
-        }
-      }
+  if (slashMatch) {
+    const slashPos = line.from + textBefore.lastIndexOf('/');
+    const query = slashMatch[1];
+    const coords = view.coordsAtPos(pos);
+    if (coords) {
+      const editorRect = view.dom.getBoundingClientRect();
+      return {
+        open: true,
+        query,
+        from: slashPos,
+        selectedIndex: 0,
+        position: {
+          top: coords.bottom - editorRect.top,
+          left: coords.left - editorRect.left,
+        },
+      };
     }
-  },
-);
+  }
+  return null;
+}

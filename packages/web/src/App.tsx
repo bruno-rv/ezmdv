@@ -142,6 +142,7 @@ function App() {
   const [backlinks, setBacklinks] = useState<ApiBacklink[]>([]);
   const [backlinksLoading, setBacklinksLoading] = useState(false);
 
+  const pendingEditModeRef = useRef(false);
   const metaCacheRef = useRef<Map<string, FileMetadata>>(new Map());
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const [metaTooltip, setMetaTooltip] = useState<{ filePath: string; data: FileMetadata } | null>(null);
@@ -225,6 +226,13 @@ function App() {
     splitView,
     setPaneContent,
   });
+
+  useEffect(() => {
+    if (pendingEditModeRef.current && primaryContent !== null && !editMode) {
+      pendingEditModeRef.current = false;
+      handleEnterEdit();
+    }
+  }, [primaryContent, editMode, handleEnterEdit]);
 
   useEffect(() => {
     if (editMode || splitView || graphProjectId) {
@@ -656,6 +664,7 @@ function App() {
       try {
         await createFile(projectId, filePath, content);
         await loadProjectFiles(projectId);
+        pendingEditModeRef.current = true;
         openProjectFile(projectId, filePath);
       } catch (error) {
         console.error('Create file failed:', error);

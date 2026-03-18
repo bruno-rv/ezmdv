@@ -51,14 +51,20 @@ export function useEditMode({
     setEditMode(true);
   }, [primaryContent, splitView]);
 
-  const handleExitEdit = useCallback(() => {
-    if (isDirty) {
-      if (!window.confirm('You have unsaved changes. Discard them?')) {
-        return;
+  const handleExitEdit = useCallback(async () => {
+    if (isDirty && primaryTab && !saving) {
+      setSaving(true);
+      try {
+        await saveFileContent(primaryTab.projectId, primaryTab.filePath, editContent);
+        setPaneContent('primary', editContent);
+      } catch (error) {
+        console.error('Save failed:', error);
+      } finally {
+        setSaving(false);
       }
     }
     setEditMode(false);
-  }, [isDirty]);
+  }, [isDirty, primaryTab, saving, editContent, setPaneContent]);
 
   const handleSave = useCallback(
     async (exitAfter = false) => {
