@@ -58,20 +58,28 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
   );
 
   const handleEditorUpdate = useCallback((viewUpdate: ViewUpdate) => {
-    if (!viewUpdate.docChanged && !viewUpdate.selectionSet) return;
-
     const view = viewUpdate.view;
+    const currentField = view.state.field(slashMenuField);
+
+    if (!viewUpdate.docChanged && !viewUpdate.selectionSet) {
+      setSlashMenuState(prev => {
+        if (!currentField.open) return prev === null ? prev : null;
+        if (prev && prev.selectedIndex === currentField.selectedIndex && prev.query === currentField.query) return prev;
+        return currentField;
+      });
+      return;
+    }
+
     const detected = detectSlashMenu(view);
 
     if (detected) {
-      const current = view.state.field(slashMenuField);
-      if (!current.open || current.query !== detected.query || current.from !== detected.from) {
+      if (!currentField.open || currentField.query !== detected.query || currentField.from !== detected.from) {
         view.dispatch({
           effects: setSlashMenu.of({
             open: true,
             query: detected.query,
             from: detected.from,
-            selectedIndex: current.open ? current.selectedIndex : 0,
+            selectedIndex: currentField.open ? currentField.selectedIndex : 0,
             position: detected.position,
           }),
         });
@@ -83,8 +91,7 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
         return detected;
       });
     } else {
-      const current = view.state.field(slashMenuField);
-      if (current.open) {
+      if (currentField.open) {
         view.dispatch({ effects: closeSlashMenu.of(undefined) });
       }
       setSlashMenuState(null);
