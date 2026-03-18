@@ -195,7 +195,7 @@ export function CommandPalette({
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setSelectedIndex((prev) => Math.max(prev - 1, 0));
-      } else if (e.key === 'Enter') {
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault();
         executeSelected();
       } else if (e.key === 'Escape') {
@@ -270,7 +270,7 @@ export function CommandPalette({
         </div>
         <div className="border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
           <span className="mr-3">↑↓ navigate</span>
-          <span className="mr-3">↵ open</span>
+          <span className="mr-3">↵/tab open</span>
           <span>esc close</span>
         </div>
       </div>
