@@ -82,6 +82,7 @@ function App() {
     uploadToProject,
     moveFileBetweenProjects,
     createProjectFolder,
+    deleteProjectFile,
     mergeProject,
     extractSubfolder,
     mergeSubfolder,
@@ -808,6 +809,21 @@ function App() {
     [createProjectFolder],
   );
 
+  const handleDeleteFile = useCallback(
+    async (projectId: string, filePath: string) => {
+      try {
+        if (editMode && primaryTab?.projectId === projectId && primaryTab?.filePath === filePath) {
+          setEditMode(false);
+        }
+        await deleteProjectFile(projectId, filePath);
+        closeTab(projectId, filePath);
+      } catch (error) {
+        console.error('Delete file failed:', error);
+      }
+    },
+    [closeTab, deleteProjectFile, editMode, primaryTab, setEditMode],
+  );
+
   const handleTabClose = useCallback(
     (projectId: string, filePath: string) => {
       if (
@@ -1162,6 +1178,7 @@ function App() {
           onMergeSubfolder={handleMergeSubfolder}
           onExtractSubfolder={handleExtractSubfolder}
           onCreateFolder={handleCreateFolder}
+          onDeleteFile={handleDeleteFile}
           autoExpandProjectId={autoExpandProjectId}
           isOpen={sidebarOpen}
           collapsed={sidebarCollapsed}

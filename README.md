@@ -39,6 +39,7 @@ It is a monorepo with three packages:
 - Drag-and-drop projects onto each other to merge as subfolders (no confirmation dialog)
 - Drag a **subfolder** from the file tree onto another project header to merge it into that project
 - Drag a **subfolder** from the file tree to the drop zone below the project list to extract it as a new standalone project
+- Right-click context menu on files and folders for delete (and subfolder creation)
 - Create subfolders within projects directly from the file tree
 - Multi-select projects for bulk delete/open
 - File metadata tooltip (size, line count, dates)
@@ -139,13 +140,13 @@ Open `http://localhost:5173` — changes hot-reload instantly via Vite HMR.
 
 ## Tests
 
-197 tests across 20 files using Vitest:
+201 tests across 20 files using Vitest:
 
 ```bash
 npm test
 ```
 
-- **Server** (104 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, project merging, subfolder extraction, subfolder merge, fuzzy search (trigrams, stemming, scoring), zoom level persistence, backlinks
+- **Server** (108 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, file/folder deletion, project merging, subfolder extraction, subfolder merge, fuzzy search (trigrams, stemming, scoring), zoom level persistence, backlinks
 - **Web** (93 tests, 14 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom, ExpandedProjectContent component, GlobalSearch component, command palette, backlinks panel, table of contents, templates, slash commands
 
 ## Local Data

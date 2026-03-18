@@ -483,6 +483,35 @@ export function createProjectRoutes(statePath?: string): Router {
     }
   });
 
+  // DELETE /api/projects/:id/files/* — delete a file or folder
+  router.delete('/:id/files/*filePath', withProject, (req: Request, res: Response) => {
+    const { project } = req as ProjectRequest;
+
+    const filePath = resolveWildcardPath(req);
+    if (!filePath) {
+      res.status(400).json({ error: 'File path is required' });
+      return;
+    }
+
+    const fullPath = path.join(project.path, filePath);
+    if (!isPathWithinRoot(fullPath, project.path)) {
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    try {
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        fs.rmSync(fullPath, { recursive: true });
+      } else {
+        fs.unlinkSync(fullPath);
+      }
+      res.json({ deleted: filePath });
+    } catch {
+      res.status(404).json({ error: 'Not found' });
+    }
+  });
+
   // POST /api/projects/:id/create-file
   router.post('/:id/create-file', withProject, (req: Request, res: Response) => {
     const { project } = req as ProjectRequest;

@@ -38,6 +38,7 @@ interface ExpandedProjectContentProps {
   onOpenGraph: (projectId: string) => void;
   onCreateFile?: (projectId: string, filePath: string, content?: string) => void;
   onCreateFolder?: (projectId: string, folderPath: string) => void;
+  onDeleteFile?: (projectId: string, filePath: string) => void;
   onUploadToProject?: (projectId: string, files: File[]) => void;
   globalFilter?: Set<string> | null;
   draggable?: boolean;
@@ -52,6 +53,7 @@ export function ExpandedProjectContent({
   onOpenGraph,
   onCreateFile,
   onCreateFolder,
+  onDeleteFile,
   onUploadToProject,
   globalFilter,
   draggable,
@@ -357,6 +359,7 @@ export function ExpandedProjectContent({
                 depth={1}
                 onFileClick={onFileClick}
                 onCreateFolder={onCreateFolder}
+                onDeleteFile={onDeleteFile}
                 draggable={draggable}
                 onFolderDragStart={onFolderDragStart}
                 onFolderDragEnd={onFolderDragEnd}
