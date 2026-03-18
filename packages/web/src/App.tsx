@@ -4,6 +4,8 @@ import {
   Columns2,
   Eye,
   Info,
+  Link2,
+  List,
   Maximize2,
   Menu,
   Minimize2,
@@ -20,10 +22,13 @@ import { Button } from '@/components/ui/button';
 import { Sidebar } from '@/components/Sidebar';
 import { TabBar } from '@/components/TabBar';
 import { MarkdownView } from '@/components/MarkdownView';
+import { TableOfContents, type TocHeading } from '@/components/TableOfContents';
 import { FileMetaTooltip } from '@/components/FileMetaTooltip';
 import { GraphPanel } from '@/components/GraphPanel';
 import { GraphPreviewModal } from '@/components/GraphPreviewModal';
 import { ShortcutsModal } from '@/components/ShortcutsModal';
+import { CommandPalette, useCommandPaletteActions } from '@/components/CommandPalette';
+import { BacklinksPanel, type Backlink } from '@/components/BacklinksPanel';
 import { cn } from '@/lib/utils';
 
 const MarkdownEditor = lazy(() =>
@@ -44,8 +49,10 @@ import {
   fetchProjectGraph,
   fetchState,
   saveFileContent,
+  fetchBacklinks,
   uploadFiles,
   updateState,
+  type Backlink as ApiBacklink,
   type FileMetadata,
   type FileTreeEntry,
   type ProjectGraph,
@@ -139,6 +146,13 @@ function App() {
   } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const dragCounterRef = useRef(0);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [tocHeadings, setTocHeadings] = useState<TocHeading[]>([]);
+  const [tocActiveId, setTocActiveId] = useState<string | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [backlinksOpen, setBacklinksOpen] = useState(false);
+  const [backlinks, setBacklinks] = useState<ApiBacklink[]>([]);
+  const [backlinksLoading, setBacklinksLoading] = useState(false);
 
   const metaCacheRef = useRef<Map<string, FileMetadata>>(new Map());
   const contentScrollRef = useRef<HTMLDivElement>(null);
@@ -155,6 +169,47 @@ function App() {
       document.removeEventListener('keydown', onKey);
     };
   }, [metaTooltip]);
+
+  useEffect(() => {
+    if (!tocOpen || tocHeadings.length === 0) return;
+    const scrollContainer = contentScrollRef.current;
+    if (!scrollContainer) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setTocActiveId(entry.target.id);
+            break;
+          }
+        }
+      },
+      { root: scrollContainer, rootMargin: '0px 0px -80% 0px', threshold: 0 },
+    );
+
+    for (const heading of tocHeadings) {
+      const el = document.getElementById(heading.id);
+      if (el) observer.observe(el);
+    }
+
+    return () => observer.disconnect();
+  }, [tocOpen, tocHeadings]);
+
+  const handleTocHeadingClick = useCallback((id: string) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, []);
+
+  const handleToggleToc = useCallback(() => {
+    setTocOpen((prev) => !prev);
+  }, []);
+
+  const handleHeadingsExtracted = useCallback((headings: TocHeading[]) => {
+    setTocHeadings((prev) => {
+      if (prev.length === headings.length && prev.every((h, i) => h.id === headings[i].id)) return prev;
+      return headings;
+    });
+  }, []);
 
   const primaryContent = paneStates.primary.content;
 
@@ -182,6 +237,12 @@ function App() {
     splitView,
     setPaneContent,
   });
+
+  useEffect(() => {
+    if (editMode || splitView || graphProjectId) {
+      setTocOpen(false);
+    }
+  }, [editMode, splitView, graphProjectId]);
 
   const autoScroll = useAutoScroll({
     containerRef: contentScrollRef,
@@ -400,7 +461,58 @@ function App() {
     setGraphPreview: setGraphPreviewNull,
     autoScrollToggle: autoScroll.toggle,
     refreshPaneContent,
+    toggleToc: handleToggleToc,
   });
+
+  useEffect(() => {
+    function handleCmdK(e: KeyboardEvent) {
+      const isMac = navigator.platform.toUpperCase().includes('MAC');
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    }
+    window.addEventListener('keydown', handleCmdK);
+    return () => window.removeEventListener('keydown', handleCmdK);
+  }, []);
+
+  useEffect(() => {
+    if (!backlinksOpen || !primaryTab) {
+      setBacklinks([]);
+      return;
+    }
+    setBacklinksLoading(true);
+    fetchBacklinks(primaryTab.projectId, primaryTab.filePath)
+      .then(setBacklinks)
+      .catch(() => setBacklinks([]))
+      .finally(() => setBacklinksLoading(false));
+  }, [backlinksOpen, primaryTab?.projectId, primaryTab?.filePath]);
+
+  const commandPaletteActions = useCommandPaletteActions({
+    theme,
+    toggleTheme,
+    editMode,
+    splitView,
+    handleEnterEdit,
+    handleExitEdit,
+    handleSplitView: useCallback(() => {
+      if (editMode) {
+        if (isDirty && !window.confirm('You have unsaved changes. Discard them?')) return;
+        setEditMode(false);
+      }
+      enterSplitView();
+    }, [editMode, enterSplitView, isDirty, setEditMode]),
+    onShowShortcuts: useCallback(() => setShowShortcuts(true), []),
+  });
+
+  const handleBacklinkFileClick = useCallback(
+    (filePath: string) => {
+      if (!primaryTab) return;
+      openProjectFile(primaryTab.projectId, filePath);
+    },
+    [primaryTab, openProjectFile],
+  );
 
   const handleFileClick = useCallback(
     (projectId: string, filePath: string) => {
@@ -552,9 +664,9 @@ function App() {
   );
 
   const handleCreateFile = useCallback(
-    async (projectId: string, filePath: string) => {
+    async (projectId: string, filePath: string, content?: string) => {
       try {
-        await createFile(projectId, filePath);
+        await createFile(projectId, filePath, content);
         await loadProjectFiles(projectId);
         openProjectFile(projectId, filePath);
       } catch (error) {
@@ -837,6 +949,37 @@ function App() {
               </Button>
             )}
 
+            {!editMode && pane === 'primary' && !previewOnly && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleToc();
+                  }}
+                  aria-label={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
+                  title={tocOpen ? 'Hide table of contents (Ctrl+Shift+T)' : 'Table of contents (Ctrl+Shift+T)'}
+                  className={cn(tocOpen && 'bg-muted')}
+                >
+                  <List className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBacklinksOpen((prev) => !prev);
+                  }}
+                  aria-label={backlinksOpen ? 'Hide backlinks' : 'Show backlinks'}
+                  title={backlinksOpen ? 'Hide backlinks' : 'Backlinks'}
+                  className={cn(backlinksOpen && 'bg-muted')}
+                >
+                  <Link2 className="size-4" />
+                </Button>
+              </>
+            )}
+
             <div
               className="relative"
               onMouseDown={(e) => e.stopPropagation()}
@@ -1039,22 +1182,59 @@ function App() {
                   theme={theme}
                   onChange={setEditContent}
                   filePaths={editorFilePaths}
+                  projectId={tab?.projectId}
                 />
               </div>
             </Suspense>
           ) : paneState.content !== null ? (
-            <div
-              className="flex-1 overflow-auto p-6"
-              ref={pane === 'primary' ? contentScrollRef : undefined}
-            >
-              <MarkdownView
-                content={paneState.content}
-                zoom={zoom}
-                onLinkClick={(target, kind) => handleLinkClick(pane, target, kind)}
-                onCheckboxChange={(index, checked) =>
-                  handleCheckboxChange(pane, index, checked)
-                }
-              />
+            <div className="flex flex-1 min-h-0">
+              <div
+                className="flex-1 overflow-auto p-6"
+                ref={pane === 'primary' ? contentScrollRef : undefined}
+              >
+                <MarkdownView
+                  content={paneState.content}
+                  zoom={zoom}
+                  projectId={tab.projectId}
+                  onLinkClick={(target, kind) => handleLinkClick(pane, target, kind)}
+                  onCheckboxChange={(index, checked) =>
+                    handleCheckboxChange(pane, index, checked)
+                  }
+                  onHeadingsExtracted={pane === 'primary' && !previewOnly ? handleHeadingsExtracted : undefined}
+                />
+              </div>
+              {(tocOpen || backlinksOpen) && pane === 'primary' && !previewOnly && (
+                <div className="w-[250px] shrink-0 overflow-y-auto border-l border-border bg-background">
+                  {tocOpen && (
+                    <>
+                      <div className="sticky top-0 border-b border-border bg-background px-3 py-2">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Contents
+                        </span>
+                      </div>
+                      <TableOfContents
+                        headings={tocHeadings}
+                        activeId={tocActiveId}
+                        onHeadingClick={handleTocHeadingClick}
+                      />
+                    </>
+                  )}
+                  {backlinksOpen && (
+                    <>
+                      <div className={cn('border-b border-border bg-background px-3 py-2', tocOpen && 'border-t')}>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Backlinks ({backlinks.length})
+                        </span>
+                      </div>
+                      <BacklinksPanel
+                        backlinks={backlinks}
+                        loading={backlinksLoading}
+                        onFileClick={handleBacklinkFileClick}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center">
@@ -1081,6 +1261,9 @@ function App() {
       handleSplitView,
       handleZoomChange,
       handleZoomReset,
+      handleHeadingsExtracted,
+      handleTocHeadingClick,
+      handleToggleToc,
       isDirty,
       metaTooltip,
       paneStates,
@@ -1092,6 +1275,13 @@ function App() {
       setFullscreenPane,
       splitView,
       theme,
+      tocActiveId,
+      tocHeadings,
+      tocOpen,
+      backlinks,
+      backlinksLoading,
+      backlinksOpen,
+      handleBacklinkFileClick,
     ],
   );
 
@@ -1284,6 +1474,7 @@ function App() {
         <GraphPreviewModal
           filePath={graphPreview.filePath}
           content={graphPreview.content}
+          projectId={graphPreview.projectId}
           zoom={getZoom(graphPreview.projectId, graphPreview.filePath)}
           onZoomIn={() => handleZoomChange(graphPreview.projectId, graphPreview.filePath, +0.1)}
           onZoomOut={() => handleZoomChange(graphPreview.projectId, graphPreview.filePath, -0.1)}
@@ -1291,6 +1482,24 @@ function App() {
           onClose={setGraphPreviewNull}
         />
       )}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        projects={projects}
+        tabs={tabs}
+        activeTab={activeTab}
+        theme={theme}
+        actions={commandPaletteActions}
+        onFileSelect={(projectId, filePath) => {
+          openProjectFile(projectId, filePath);
+          setCommandPaletteOpen(false);
+        }}
+        onTabSelect={(projectId, filePath) => {
+          switchTab(projectId, filePath);
+          setGraphProjectId(null);
+          setCommandPaletteOpen(false);
+        }}
+      />
       {dragOver && (
         <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 px-12 py-10">

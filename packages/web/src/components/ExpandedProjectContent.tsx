@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { FilePlus, FolderPlus, Search, Upload, Waypoints } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FileTreeNode } from '@/components/FileTreeNode';
+import { TemplatePicker } from '@/components/TemplatePicker';
 import { cn } from '@/lib/utils';
 import type { ProjectWithFiles } from '@/hooks/useProjects';
 import { searchProjectContent, type Tab, type FileTreeEntry } from '@/lib/api';
+import { templates, formatTemplate, type Template } from '@/lib/templates';
 
 function filterEntries(
   entries: FileTreeEntry[],
@@ -34,7 +36,7 @@ interface ExpandedProjectContentProps {
   activeTab: Tab | null;
   onFileClick: (projectId: string, filePath: string) => void;
   onOpenGraph: (projectId: string) => void;
-  onCreateFile?: (projectId: string, filePath: string) => void;
+  onCreateFile?: (projectId: string, filePath: string, content?: string) => void;
   onCreateFolder?: (projectId: string, folderPath: string) => void;
   onUploadToProject?: (projectId: string, files: File[]) => void;
   globalFilter?: Set<string> | null;
@@ -61,12 +63,28 @@ export function ExpandedProjectContent({
   const [searching, setSearching] = useState(false);
   const [creatingFile, setCreatingFile] = useState(false);
   const [newFileName, setNewFileName] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<Template>(templates[0]);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [searchMode, setSearchMode] = useState<'exact' | 'fuzzy'>('exact');
   const createInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+
+  const submitNewFile = useCallback(
+    (name: string, template: Template) => {
+      if (!name || !onCreateFile) return;
+      const filePath = name.toLowerCase().endsWith('.md') ? name : `${name}.md`;
+      const baseName = filePath.replace(/\.md$/i, '');
+      const content = formatTemplate(template, {
+        date: new Date().toISOString().slice(0, 10),
+        filename: baseName,
+      });
+      onCreateFile(project.id, filePath, content || undefined);
+    },
+    [onCreateFile, project.id],
+  );
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -148,6 +166,8 @@ export function ExpandedProjectContent({
                   setCreatingFile(true);
                   setCreatingFolder(false);
                   setNewFileName('');
+                  setSelectedTemplate(templates[0]);
+                  setShowTemplatePicker(false);
                   setTimeout(() => createInputRef.current?.focus(), 0);
                 }}
                 aria-label="Create new file"
@@ -210,41 +230,75 @@ export function ExpandedProjectContent({
       )}
 
       {creatingFile && onCreateFile && (
-        <form
-          className="flex items-center gap-1 px-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const name = newFileName.trim();
-            if (!name) return;
-            const filePath = name.toLowerCase().endsWith('.md') ? name : `${name}.md`;
-            onCreateFile(project.id, filePath);
-            setCreatingFile(false);
-            setNewFileName('');
-          }}
-        >
-          <input
-            ref={createInputRef}
-            value={newFileName}
-            onChange={(e) => setNewFileName(e.target.value)}
-            placeholder="new-note.md"
-            className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
-            onBlur={() => {
+        <div className="relative px-3 space-y-1">
+          <form
+            className="flex items-center gap-1"
+            onSubmit={(e) => {
+              e.preventDefault();
               const name = newFileName.trim();
-              if (name && onCreateFile) {
-                const filePath = name.toLowerCase().endsWith('.md') ? name : `${name}.md`;
-                onCreateFile(project.id, filePath);
-              }
+              if (!name) return;
+              submitNewFile(name, selectedTemplate);
               setCreatingFile(false);
               setNewFileName('');
+              setSelectedTemplate(templates[0]);
+              setShowTemplatePicker(false);
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setCreatingFile(false);
-                setNewFileName('');
-              }
-            }}
-          />
-        </form>
+          >
+            <input
+              ref={createInputRef}
+              value={newFileName}
+              onChange={(e) => setNewFileName(e.target.value)}
+              placeholder="new-note.md"
+              className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+              onBlur={() => {
+                setTimeout(() => {
+                  if (showTemplatePicker) return;
+                  const name = newFileName.trim();
+                  if (name) {
+                    submitNewFile(name, selectedTemplate);
+                  }
+                  setCreatingFile(false);
+                  setNewFileName('');
+                  setSelectedTemplate(templates[0]);
+                  setShowTemplatePicker(false);
+                }, 150);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setCreatingFile(false);
+                  setNewFileName('');
+                  setSelectedTemplate(templates[0]);
+                  setShowTemplatePicker(false);
+                }
+              }}
+            />
+            <button
+              type="button"
+              className={cn(
+                'h-7 shrink-0 rounded-md border border-border bg-background px-2 text-[10px] font-medium transition-colors hover:bg-muted/50',
+                selectedTemplate.id !== 'blank' && 'border-primary/50 text-primary',
+              )}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setShowTemplatePicker((prev) => !prev);
+              }}
+              title="Choose template"
+            >
+              {selectedTemplate.name}
+            </button>
+          </form>
+          {showTemplatePicker && (
+            <TemplatePicker
+              selected={selectedTemplate.id}
+              onSelect={(t) => {
+                setSelectedTemplate(t);
+                setShowTemplatePicker(false);
+                createInputRef.current?.focus();
+              }}
+              onClose={() => setShowTemplatePicker(false)}
+            />
+          )}
+        </div>
       )}
 
       {creatingFolder && onCreateFolder && (

@@ -13,7 +13,14 @@ export const SHORTCUT_DEFS: ShortcutDef[] = [
   { id: 'prevTab',       description: 'Previous tab',         defaultBinding: 'mod+[',         customizable: true },
   { id: 'autoScroll',    description: 'Toggle autoscroll',    defaultBinding: 'mod+shift+a',   customizable: true },
   { id: 'refresh',       description: 'Refresh from disk',    defaultBinding: 'mod+shift+r',   customizable: true },
+  { id: 'toggleToc',     description: 'Toggle table of contents', defaultBinding: 'mod+shift+t', customizable: true },
   { id: 'exitFullscreen', description: 'Exit fullscreen',     defaultBinding: 'escape',        customizable: false },
+  { id: 'commandPalette', description: 'Command palette',      defaultBinding: 'mod+k',         customizable: false },
+];
+
+export const EDITOR_SHORTCUTS = [
+  { key: 'mod+f', description: 'Find' },
+  { key: 'mod+h', description: 'Find & Replace' },
 ];
 
 export const GRAPH_SHORTCUTS = [

@@ -3,6 +3,7 @@ import { Pencil, RotateCcw, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   SHORTCUT_DEFS,
+  EDITOR_SHORTCUTS,
   GRAPH_SHORTCUTS,
   formatBindingForDisplay,
   bindingFromEvent,
@@ -162,6 +163,22 @@ export function ShortcutsModal({
                   <span className="py-0.5 text-sm text-muted-foreground">{def.description}</span>
                   <kbd className="self-center whitespace-nowrap rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">
                     {formatBindingForDisplay(def.defaultBinding)}
+                  </kbd>
+                </Fragment>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Editor
+            </p>
+            <div className="grid grid-cols-[1fr_auto] gap-y-1">
+              {EDITOR_SHORTCUTS.map(({ key, description }) => (
+                <Fragment key={key}>
+                  <span className="py-0.5 text-sm text-muted-foreground">{description}</span>
+                  <kbd className="self-center whitespace-nowrap rounded border border-border bg-muted px-1.5 py-0.5 text-xs font-mono">
+                    {formatBindingForDisplay(key)}
                   </kbd>
                 </Fragment>
               ))}

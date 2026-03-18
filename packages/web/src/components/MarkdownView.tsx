@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useCallback, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
@@ -10,19 +10,25 @@ import {
   WIKI_LINK_PREFIX,
   type InternalLinkKind,
 } from '@/lib/markdownLinks';
+import { getImageUrl } from '@/lib/api';
+import type { TocHeading } from './TableOfContents';
 
 interface MarkdownViewProps {
   content: string;
   onLinkClick: (target: string, kind: InternalLinkKind) => void;
   onCheckboxChange?: (index: number, checked: boolean) => void;
+  onHeadingsExtracted?: (headings: TocHeading[]) => void;
   zoom?: number;
+  projectId?: string;
 }
 
 export function MarkdownView({
   content,
   onLinkClick,
   onCheckboxChange,
+  onHeadingsExtracted,
   zoom = 1,
+  projectId,
 }: MarkdownViewProps) {
   const remarkPlugins = useMemo(() => [remarkGfm], []);
   const rehypePlugins = useMemo(() => [rehypeHighlight], []);
@@ -42,38 +48,50 @@ export function MarkdownView({
   // Track footnote definitions extracted from the DOM
   const [footnoteMap, setFootnoteMap] = useState<Record<string, string>>({});
 
-  // Ref callback for the markdown container to extract footnote definitions
-  const containerRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return;
-    // Extract footnote definitions from the rendered GFM footnote section
-    const footnotesSection = node.querySelector('[data-footnotes]') ?? node.querySelector('.footnotes');
-    if (!footnotesSection) return;
+  const containerNodeRef = useRef<HTMLDivElement | null>(null);
 
-    const map: Record<string, string> = {};
-    const listItems = footnotesSection.querySelectorAll('li[id]');
-    for (const li of listItems) {
-      // GFM footnote li ids are like "user-content-fn-<label>"
-      const id = li.getAttribute('id') ?? '';
-      const match = id.match(/fn-(.+)$/);
-      if (match) {
-        // Get text content excluding the back-reference link
-        const clone = li.cloneNode(true) as HTMLElement;
-        const backRef = clone.querySelector('.data-footnote-backref') ?? clone.querySelector('a[href^="#user-content-fnref"]');
-        if (backRef) backRef.remove();
-        map[match[1]] = clone.textContent?.trim() ?? '';
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    containerNodeRef.current = node;
+    if (!node) return;
+
+    const footnotesSection = node.querySelector('[data-footnotes]') ?? node.querySelector('.footnotes');
+    if (footnotesSection) {
+      const map: Record<string, string> = {};
+      const listItems = footnotesSection.querySelectorAll('li[id]');
+      for (const li of listItems) {
+        const id = li.getAttribute('id') ?? '';
+        const match = id.match(/fn-(.+)$/);
+        if (match) {
+          const clone = li.cloneNode(true) as HTMLElement;
+          const backRef = clone.querySelector('.data-footnote-backref') ?? clone.querySelector('a[href^="#user-content-fnref"]');
+          if (backRef) backRef.remove();
+          map[match[1]] = clone.textContent?.trim() ?? '';
+        }
+      }
+
+      if (Object.keys(map).length > 0) {
+        setFootnoteMap((prev) => {
+          const prevKeys = Object.keys(prev).sort().join(',');
+          const newKeys = Object.keys(map).sort().join(',');
+          if (prevKeys === newKeys) return prev;
+          return map;
+        });
       }
     }
 
-    if (Object.keys(map).length > 0) {
-      setFootnoteMap((prev) => {
-        // Only update if something changed to avoid infinite re-render
-        const prevKeys = Object.keys(prev).sort().join(',');
-        const newKeys = Object.keys(map).sort().join(',');
-        if (prevKeys === newKeys) return prev;
-        return map;
+    if (onHeadingsExtracted) {
+      const headingEls = node.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      const headings: TocHeading[] = [];
+      headingEls.forEach((el) => {
+        const id = el.getAttribute('id');
+        if (!id) return;
+        const level = parseInt(el.tagName[1], 10);
+        const text = el.textContent?.trim() ?? '';
+        if (text) headings.push({ id, text, level });
       });
+      onHeadingsExtracted(headings);
     }
-  }, []);
+  }, [onHeadingsExtracted]);
 
   const components = useMemo(() => {
     return {
@@ -247,8 +265,23 @@ export function MarkdownView({
         }
         return <section {...props}>{children}</section>;
       },
+
+      img: ({
+        src,
+        node: _node,
+        ...props
+      }: ComponentPropsWithoutRef<'img'> & { node?: unknown }) => {
+        let resolvedSrc = src;
+        if (projectId && src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:')) {
+          if (src.startsWith('images/')) {
+            const imagePath = src.slice('images/'.length);
+            resolvedSrc = getImageUrl(projectId, imagePath);
+          }
+        }
+        return <img src={resolvedSrc} {...props} />;
+      },
     };
-  }, [onLinkClick, onCheckboxChange, footnoteMap]);
+  }, [onLinkClick, onCheckboxChange, footnoteMap, projectId]);
 
   return (
     <div

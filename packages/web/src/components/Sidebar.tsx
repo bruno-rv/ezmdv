@@ -48,7 +48,7 @@ interface SidebarProps {
   onClose: () => void;
   onToggleCollapse: () => void;
   onOpenGraph: (projectId: string) => void;
-  onCreateFile: (projectId: string, filePath: string) => void;
+  onCreateFile: (projectId: string, filePath: string, content?: string) => void;
   onShowShortcuts: () => void;
   onCreateProject?: (name: string) => void;
 }
