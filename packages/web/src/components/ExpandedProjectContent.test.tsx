@@ -3,9 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ExpandedProjectContent } from './ExpandedProjectContent';
 import type { ProjectWithFiles } from '@/hooks/useProjects';
 
-vi.mock('@/lib/api', () => ({
-  searchProjectContent: vi.fn().mockResolvedValue({ results: [] }),
-}));
+vi.mock('@/lib/api', () => ({}));
 
 const project: ProjectWithFiles = {
   id: 'p1',
@@ -20,45 +18,6 @@ const project: ProjectWithFiles = {
 const noop = () => {};
 
 describe('ExpandedProjectContent', () => {
-  it('renders the search input', () => {
-    render(
-      <ExpandedProjectContent
-        project={project}
-        activeTab={null}
-        onFileClick={noop}
-        onOpenGraph={noop}
-      />,
-    );
-    expect(screen.getByPlaceholderText('Search note text...')).toBeInTheDocument();
-  });
-
-  it('renders the fuzzy toggle button', () => {
-    render(
-      <ExpandedProjectContent
-        project={project}
-        activeTab={null}
-        onFileClick={noop}
-        onOpenGraph={noop}
-      />,
-    );
-    expect(screen.getByTitle('Switch to fuzzy search')).toBeInTheDocument();
-  });
-
-  it('fuzzy toggle switches between Aa and ~ labels', () => {
-    render(
-      <ExpandedProjectContent
-        project={project}
-        activeTab={null}
-        onFileClick={noop}
-        onOpenGraph={noop}
-      />,
-    );
-    const toggle = screen.getByTitle('Switch to fuzzy search');
-    expect(toggle).toHaveTextContent('Aa');
-    fireEvent.click(toggle);
-    expect(screen.getByTitle('Switch to exact search')).toHaveTextContent('~');
-  });
-
   it('renders the graph (Waypoints) button', () => {
     render(
       <ExpandedProjectContent
@@ -97,7 +56,7 @@ describe('ExpandedProjectContent', () => {
     expect(screen.getByLabelText('Create new folder')).toBeInTheDocument();
   });
 
-  it('hides search and action toolbar when globalFilter is set', () => {
+  it('hides action toolbar when globalFilter is set', () => {
     render(
       <ExpandedProjectContent
         project={project}
@@ -108,7 +67,6 @@ describe('ExpandedProjectContent', () => {
         globalFilter={new Set(['note.md'])}
       />,
     );
-    expect(screen.queryByPlaceholderText('Search note text...')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Create new file')).not.toBeInTheDocument();
   });
 

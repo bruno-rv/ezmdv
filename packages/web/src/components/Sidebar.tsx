@@ -400,7 +400,10 @@ export function Sidebar({
                     ? 'bg-primary/15 text-primary'
                     : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
                 )}
-                onClick={() => setSidebarMode(mode)}
+                onClick={() => {
+                  if (mode !== 'search') setGlobalFilter(null);
+                  setSidebarMode(mode);
+                }}
                 title={label}
                 aria-label={label}
               >
@@ -487,15 +490,6 @@ export function Sidebar({
           <div className="flex flex-1 flex-col gap-3 px-4 py-4">
             <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Layout</span>
             <div className="flex flex-col gap-1">
-              {!selectMode && projects.length > 0 && (
-                <button
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                  onClick={() => setSelectMode(true)}
-                >
-                  <ListChecks className="size-4" />
-                  <span>Select projects</span>
-                </button>
-              )}
               {onCreateProject && (
                 <button
                   className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
@@ -508,7 +502,50 @@ export function Sidebar({
                   <span>New project</span>
                 </button>
               )}
+              <button
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="size-4" />
+                <span>Upload files</span>
+              </button>
+              {projects.length > 0 && !selectMode && (
+                <button
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  onClick={() => {
+                    setSelectMode(true);
+                    setSidebarMode('explorer');
+                  }}
+                >
+                  <ListChecks className="size-4" />
+                  <span>Select projects</span>
+                </button>
+              )}
             </div>
+
+            {projects.length > 0 && (
+              <>
+                <span className="mt-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Projects</span>
+                <div className="flex flex-col gap-0.5">
+                  {projects.map((project) => (
+                    <button
+                      key={project.id}
+                      className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                      onClick={() => {
+                        setSidebarMode('explorer');
+                        toggleProject(project.id);
+                      }}
+                    >
+                      <ChevronRight className="size-3.5" />
+                      <span className="truncate">{project.name}</span>
+                      <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                        {project.source === 'cli' ? 'CLI' : 'Local'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -547,18 +584,9 @@ export function Sidebar({
                 <p className="px-2 py-4 text-center text-sm text-muted-foreground">
                   No projects yet. Upload markdown files to get started.
                 </p>
-              ) : globalFilter && globalFilter.size === 0 ? (
-                <p className="px-2 py-4 text-center text-sm text-muted-foreground">
-                  No matching files found
-                </p>
               ) : (
-                (globalFilter
-                  ? projects.filter((p) => globalFilter.has(p.id))
-                  : projects
-                ).map((project) => {
-                  const isExpanded = globalFilter
-                    ? true
-                    : expandedProjects[project.id] ?? false;
+                projects.map((project) => {
+                  const isExpanded = expandedProjects[project.id] ?? false;
                   const isSelected = selectedIds.has(project.id);
 
                   const isDropTarget = dropTargetProjectId === project.id;
@@ -764,7 +792,6 @@ export function Sidebar({
                             onCreateFolder={onCreateFolder}
                             onDeleteFile={onDeleteFile}
                             onUploadToProject={onUploadToProject}
-                            globalFilter={globalFilter?.get(project.id)}
                             draggable={!!onMoveFile}
                             onFolderDragStart={() => setIsFolderDragging(true)}
                             onFolderDragEnd={() => {
