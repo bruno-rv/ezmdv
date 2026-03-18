@@ -99,10 +99,34 @@ export function Sidebar({
   const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(null);
   const [isFolderDragging, setIsFolderDragging] = useState(false);
   const [extractDropActive, setExtractDropActive] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [isResizing, setIsResizing] = useState(false);
   const extractDropCounter = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const effectiveCollapsed = collapsed && isDesktop;
+
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsResizing(true);
+      const startX = e.clientX;
+      const startWidth = sidebarWidth;
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const newWidth = Math.min(Math.max(startWidth + ev.clientX - startX, 200), 600);
+        setSidebarWidth(newWidth);
+      };
+      const onMouseUp = () => {
+        setIsResizing(false);
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      };
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    },
+    [sidebarWidth],
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)');
@@ -254,10 +278,12 @@ export function Sidebar({
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 flex h-full flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground transition-[width,transform] duration-200 md:static',
+          'fixed left-0 top-0 z-50 flex h-full flex-col overflow-hidden border-r border-border bg-sidebar text-sidebar-foreground md:static',
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
-          effectiveCollapsed ? 'w-[280px] md:w-14' : 'w-[280px]',
+          effectiveCollapsed && 'md:w-14',
+          isResizing ? 'select-none' : 'transition-[width,transform] duration-200',
         )}
+        style={effectiveCollapsed ? undefined : { width: `${sidebarWidth}px` }}
       >
         <div
           className={cn(
@@ -691,6 +717,12 @@ export function Sidebar({
               </div>
             ) : null}
           </>
+        )}
+        {!effectiveCollapsed && (
+          <div
+            className="absolute right-0 top-0 hidden h-full w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 md:block"
+            onMouseDown={handleResizeStart}
+          />
         )}
       </aside>
     </>
