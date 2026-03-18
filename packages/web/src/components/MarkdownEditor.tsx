@@ -2,13 +2,13 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { EditorView } from '@codemirror/view';
+import { EditorView, type ViewUpdate } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
 import { search } from '@codemirror/search';
 import { wikiLinkSource } from '@/lib/wikiLinkCompletion';
 import { hrAutoFormat } from '@/lib/markdownInputRules';
 import { uploadImage } from '@/lib/api';
-import { slashMenuField, slashCommandPlugin, slashCommandKeymap, getFilteredCommands, applySlashCommand, type SlashMenuState } from '@/lib/slashCommandExtension';
+import { slashMenuField, slashCommandKeymap, getFilteredCommands, applySlashCommand, detectSlashMenu, setSlashMenu, closeSlashMenu, type SlashMenuState } from '@/lib/slashCommandExtension';
 import { SlashCommandMenu } from './SlashCommandMenu';
 
 interface MarkdownEditorProps {
@@ -46,7 +46,7 @@ function insertImageFromFile(view: EditorView, file: File, projectId: string) {
 }
 
 export function MarkdownEditor({ content, theme, onChange, filePaths, projectId }: MarkdownEditorProps) {
-  const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
+  const [slashMenu, setSlashMenuState] = useState<SlashMenuState | null>(null);
   const editorRef = useRef<ReactCodeMirrorRef>(null);
 
   const handleChange = useCallback(
@@ -56,13 +56,38 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
     [onChange],
   );
 
-  const handleEditorUpdate = useCallback((viewUpdate: { state: { field: (field: typeof slashMenuField) => SlashMenuState } }) => {
-    const state = viewUpdate.state.field(slashMenuField);
-    setSlashMenu(prev => {
-      if (!prev && !state.open) return prev;
-      if (prev && state.open && prev.query === state.query && prev.selectedIndex === state.selectedIndex && prev.from === state.from) return prev;
-      return state.open ? state : null;
-    });
+  const handleEditorUpdate = useCallback((viewUpdate: ViewUpdate) => {
+    if (!viewUpdate.docChanged && !viewUpdate.selectionSet) return;
+
+    const view = viewUpdate.view;
+    const detected = detectSlashMenu(view);
+
+    if (detected) {
+      const current = view.state.field(slashMenuField);
+      if (!current.open || current.query !== detected.query || current.from !== detected.from) {
+        view.dispatch({
+          effects: setSlashMenu.of({
+            open: true,
+            query: detected.query,
+            from: detected.from,
+            selectedIndex: current.open ? current.selectedIndex : 0,
+            position: detected.position,
+          }),
+        });
+      }
+      setSlashMenuState(prev => {
+        if (prev && prev.query === detected.query && prev.from === detected.from) {
+          return { ...prev, position: detected.position };
+        }
+        return detected;
+      });
+    } else {
+      const current = view.state.field(slashMenuField);
+      if (current.open) {
+        view.dispatch({ effects: closeSlashMenu.of(undefined) });
+      }
+      setSlashMenuState(null);
+    }
   }, []);
 
   const extensions = useMemo(
@@ -73,7 +98,6 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
       search({ top: true }),
       hrAutoFormat(),
       slashMenuField,
-      slashCommandPlugin,
       EditorView.domEventHandlers({
         keydown(event: KeyboardEvent, view: EditorView) {
           return slashCommandKeymap(view, event);
@@ -112,7 +136,11 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
     [filePaths, projectId],
   );
 
-  const filteredCommands = slashMenu ? getFilteredCommands(slashMenu.query) : [];
+  const menuState = slashMenu ?? (editorRef.current?.view ? (() => {
+    const s = editorRef.current!.view!.state.field(slashMenuField);
+    return s.open ? s : null;
+  })() : null);
+  const filteredCommands = menuState ? getFilteredCommands(menuState.query) : [];
 
   return (
     <div className="relative h-full">
@@ -134,14 +162,14 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
           searchKeymap: false,
         }}
       />
-      {slashMenu && filteredCommands.length > 0 && (
+      {menuState && filteredCommands.length > 0 && (
         <SlashCommandMenu
           commands={filteredCommands}
-          selectedIndex={slashMenu.selectedIndex}
-          position={slashMenu.position}
+          selectedIndex={menuState.selectedIndex}
+          position={menuState.position}
           onSelect={(cmd) => {
             const view = editorRef.current?.view;
-            if (view) applySlashCommand(view, cmd, slashMenu.from);
+            if (view) applySlashCommand(view, cmd, menuState.from);
           }}
         />
       )}
