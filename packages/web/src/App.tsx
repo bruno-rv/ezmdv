@@ -1,23 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 import {
   ArrowRightLeft,
-  Columns2,
-  Eye,
-  Info,
-  Link2,
-  List,
-  Maximize2,
   Menu,
-  Minimize2,
-  Pencil,
-  RefreshCw,
-  Save,
   Upload,
   X,
-  ZoomIn,
-  ZoomOut,
 } from 'lucide-react';
-import { AutoScrollControls } from '@/components/AutoScrollControls';
+import { PaneToolbar } from '@/components/PaneToolbar';
 import { Button } from '@/components/ui/button';
 import { Sidebar } from '@/components/Sidebar';
 import { TabBar } from '@/components/TabBar';
@@ -916,253 +904,57 @@ function App() {
           )}
           onClick={() => focusPane(pane)}
         >
-          <div className="relative flex items-center gap-2 border-b border-border px-4 py-2">
-            {options.splitContext && (
-              <span
-                className={cn(
-                  'rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide',
-                  isFocused
-                    ? 'border-primary/30 bg-primary/10 text-primary'
-                    : 'border-border bg-muted/60 text-muted-foreground',
-                )}
-              >
-                {pane === 'primary' ? 'Left' : 'Right'}
-              </span>
-            )}
-
-            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              {tab.filePath}
-            </span>
-
-            {!editMode && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  refreshPaneContent(pane);
-                }}
-                aria-label="Refresh from disk"
-                title="Refresh from disk (Ctrl+Shift+R)"
-              >
-                <RefreshCw className="size-4" />
-              </Button>
-            )}
-
-            {!editMode && pane === 'primary' && !previewOnly && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleToc();
-                  }}
-                  aria-label={tocOpen ? 'Hide table of contents' : 'Show table of contents'}
-                  title={tocOpen ? 'Hide table of contents (Ctrl+Shift+T)' : 'Table of contents (Ctrl+Shift+T)'}
-                  className={cn(tocOpen && 'bg-muted')}
-                >
-                  <List className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setBacklinksOpen((prev) => !prev);
-                  }}
-                  aria-label={backlinksOpen ? 'Hide backlinks' : 'Show backlinks'}
-                  title={backlinksOpen ? 'Hide backlinks' : 'Backlinks'}
-                  className={cn(backlinksOpen && 'bg-muted')}
-                >
-                  <Link2 className="size-4" />
-                </Button>
-              </>
-            )}
-
-            <div
-              className="relative"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="File info"
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (metaTooltip?.filePath === tab.filePath) {
-                    setMetaTooltip(null);
-                    return;
-                  }
-                  const cacheKey = `${tab.projectId}:${tab.filePath}`;
-                  const cached = metaCacheRef.current.get(cacheKey);
-                  if (cached) {
-                    setMetaTooltip({ filePath: tab.filePath, data: cached });
-                    return;
-                  }
-                  try {
-                    const data = await fetchFileMetadata(tab.projectId, tab.filePath);
-                    metaCacheRef.current.set(cacheKey, data);
-                    setMetaTooltip({ filePath: tab.filePath, data });
-                  } catch {
-                    // ignore
-                  }
-                }}
-              >
-                <Info className="size-4" />
-              </Button>
-              {metaTooltip && metaTooltip.filePath === tab.filePath && (
-                <FileMetaTooltip data={metaTooltip.data} />
-              )}
-            </div>
-
-            {options.splitContext && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  exitSplitView();
-                }}
-                aria-label="Close split view"
-                title="Close split view"
-              >
-                <Columns2 className="size-4" />
-              </Button>
-            )}
-
-            {!editMode && !previewOnly && pane === 'primary' && (
-              <AutoScrollControls
-                active={autoScroll.active}
-                intervalSeconds={autoScroll.intervalSeconds}
-                scrollPercent={autoScroll.scrollPercent}
-                onToggle={autoScroll.toggle}
-                onIntervalChange={autoScroll.setIntervalSeconds}
-                onPercentChange={autoScroll.setScrollPercent}
-              />
-            )}
-
-            {(!editMode || previewOnly) && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFullscreenPane(isFullscreen ? null : pane);
-                }}
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              >
-                {isFullscreen ? (
-                  <Minimize2 className="size-4" />
-                ) : (
-                  <Maximize2 className="size-4" />
-                )}
-              </Button>
-            )}
-
-            {!editMode && tab && (
-              <>
-                <div className="mx-1 h-4 w-px bg-border" />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleZoomChange(tab.projectId, tab.filePath, -0.1);
-                  }}
-                  aria-label="Zoom out"
-                  title="Zoom out"
-                >
-                  <ZoomOut className="size-4" />
-                </Button>
-                <button
-                  className="min-w-[3rem] text-center text-xs text-muted-foreground tabular-nums select-none"
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    handleZoomReset(tab.projectId, tab.filePath);
-                  }}
-                  title="Double-click to reset zoom"
-                >
-                  {Math.round(zoom * 100)}%
-                </button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleZoomChange(tab.projectId, tab.filePath, +0.1);
-                  }}
-                  aria-label="Zoom in"
-                  title="Zoom in"
-                >
-                  <ZoomIn className="size-4" />
-                </Button>
-              </>
-            )}
-
-            {options.allowEdit &&
-              (editMode ? (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSave(true);
-                    }}
-                    disabled={saving}
-                    aria-label="Save and preview"
-                    title="Save and preview (Ctrl+E)"
-                  >
-                    <Eye className="size-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSave();
-                    }}
-                    disabled={saving || !isDirty}
-                    aria-label="Save"
-                    title="Save (Ctrl+S)"
-                  >
-                    <Save className="size-4" />
-                  </Button>
-                  {isDirty && (
-                    <span className="text-xs font-medium text-amber-500">Unsaved</span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSplitView();
-                    }}
-                    aria-label="Open split view"
-                    title="Open split view"
-                  >
-                    <Columns2 className="size-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEnterEdit();
-                    }}
-                    aria-label="Edit file"
-                    title="Edit (Ctrl+E)"
-                  >
-                    <Pencil className="size-4" />
-                  </Button>
-                </>
-              ))}
-          </div>
+          <PaneToolbar
+            editMode={editMode && !previewOnly}
+            previewOnly={previewOnly}
+            pane={pane}
+            splitContext={options.splitContext}
+            isFocused={isFocused}
+            isFullscreen={isFullscreen}
+            tocOpen={tocOpen}
+            backlinksOpen={backlinksOpen}
+            zoom={zoom}
+            isDirty={isDirty}
+            saving={saving}
+            filePath={tab.filePath}
+            autoScroll={autoScroll}
+            onRefresh={() => refreshPaneContent(pane)}
+            onToggleToc={handleToggleToc}
+            onToggleBacklinks={() => setBacklinksOpen((prev) => !prev)}
+            onFileInfo={async () => {
+              if (metaTooltip?.filePath === tab.filePath) {
+                setMetaTooltip(null);
+                return;
+              }
+              const cacheKey = `${tab.projectId}:${tab.filePath}`;
+              const cached = metaCacheRef.current.get(cacheKey);
+              if (cached) {
+                setMetaTooltip({ filePath: tab.filePath, data: cached });
+                return;
+              }
+              try {
+                const data = await fetchFileMetadata(tab.projectId, tab.filePath);
+                metaCacheRef.current.set(cacheKey, data);
+                setMetaTooltip({ filePath: tab.filePath, data });
+              } catch {
+                // ignore
+              }
+            }}
+            metaTooltipContent={
+              metaTooltip && metaTooltip.filePath === tab.filePath
+                ? <FileMetaTooltip data={metaTooltip.data} />
+                : null
+            }
+            onCloseSplit={() => exitSplitView()}
+            onFullscreen={() => setFullscreenPane(isFullscreen ? null : pane)}
+            onZoomIn={() => handleZoomChange(tab.projectId, tab.filePath, +0.1)}
+            onZoomOut={() => handleZoomChange(tab.projectId, tab.filePath, -0.1)}
+            onZoomReset={() => handleZoomReset(tab.projectId, tab.filePath)}
+            onSave={() => handleSave()}
+            onSaveAndPreview={() => handleSave(true)}
+            onSplitView={handleSplitView}
+            onEdit={handleEnterEdit}
+          />
 
           {paneState.loading ? (
             <div className="flex flex-1 items-center justify-center">

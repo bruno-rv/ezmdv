@@ -1,12 +1,15 @@
-import { useCallback, useMemo } from 'react';
-import CodeMirror from '@uiw/react-codemirror';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
 import { search } from '@codemirror/search';
 import { wikiLinkSource } from '@/lib/wikiLinkCompletion';
+import { hrAutoFormat } from '@/lib/markdownInputRules';
 import { uploadImage } from '@/lib/api';
+import { slashMenuField, slashCommandPlugin, slashCommandKeymap, getFilteredCommands, applySlashCommand, type SlashMenuState } from '@/lib/slashCommandExtension';
+import { SlashCommandMenu } from './SlashCommandMenu';
 
 interface MarkdownEditorProps {
   content: string;
@@ -43,6 +46,9 @@ function insertImageFromFile(view: EditorView, file: File, projectId: string) {
 }
 
 export function MarkdownEditor({ content, theme, onChange, filePaths, projectId }: MarkdownEditorProps) {
+  const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
+
   const handleChange = useCallback(
     (value: string) => {
       onChange(value);
@@ -50,15 +56,30 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
     [onChange],
   );
 
+  const handleEditorUpdate = useCallback((viewUpdate: { state: { field: (field: typeof slashMenuField) => SlashMenuState } }) => {
+    const state = viewUpdate.state.field(slashMenuField);
+    setSlashMenu(prev => {
+      if (!prev && !state.open) return prev;
+      if (prev && state.open && prev.query === state.query && prev.selectedIndex === state.selectedIndex && prev.from === state.from) return prev;
+      return state.open ? state : null;
+    });
+  }, []);
+
   const extensions = useMemo(
     () => [
       markdown({ base: markdownLanguage, codeLanguages: languages }),
       EditorView.lineWrapping,
       autocompletion({ override: [wikiLinkSource(filePaths ?? [])], closeOnBlur: true }),
       search({ top: true }),
-      ...(projectId
-        ? [
-            EditorView.domEventHandlers({
+      hrAutoFormat(),
+      slashMenuField,
+      slashCommandPlugin,
+      EditorView.domEventHandlers({
+        keydown(event: KeyboardEvent, view: EditorView) {
+          return slashCommandKeymap(view, event);
+        },
+        ...(projectId
+          ? {
               paste(event: ClipboardEvent, view: EditorView) {
                 const items = Array.from(event.clipboardData?.items ?? []);
                 const imageItem = items.find((item) => item.type.startsWith('image/'));
@@ -84,29 +105,46 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
                 }
                 return true;
               },
-            }),
-          ]
-        : []),
+            }
+          : {}),
+      }),
     ],
     [filePaths, projectId],
   );
 
+  const filteredCommands = slashMenu ? getFilteredCommands(slashMenu.query) : [];
+
   return (
-    <CodeMirror
-      value={content}
-      theme={theme}
-      extensions={extensions}
-      onChange={handleChange}
-      className="h-full [&_.cm-editor]:h-full [&_.cm-scroller]:!font-mono [&_.cm-scroller]:text-sm"
-      height="100%"
-      basicSetup={{
-        lineNumbers: true,
-        highlightActiveLine: true,
-        foldGutter: true,
-        bracketMatching: true,
-        indentOnInput: true,
-        searchKeymap: false,
-      }}
-    />
+    <div className="relative h-full">
+      <CodeMirror
+        ref={editorRef}
+        value={content}
+        theme={theme}
+        extensions={extensions}
+        onChange={handleChange}
+        onUpdate={handleEditorUpdate}
+        className="h-full [&_.cm-editor]:h-full [&_.cm-scroller]:!font-mono [&_.cm-scroller]:text-sm"
+        height="100%"
+        basicSetup={{
+          lineNumbers: true,
+          highlightActiveLine: true,
+          foldGutter: true,
+          bracketMatching: true,
+          indentOnInput: true,
+          searchKeymap: false,
+        }}
+      />
+      {slashMenu && filteredCommands.length > 0 && (
+        <SlashCommandMenu
+          commands={filteredCommands}
+          selectedIndex={slashMenu.selectedIndex}
+          position={slashMenu.position}
+          onSelect={(cmd) => {
+            const view = editorRef.current?.view;
+            if (view) applySlashCommand(view, cmd, slashMenu.from);
+          }}
+        />
+      )}
+    </div>
   );
 }

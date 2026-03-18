@@ -2,6 +2,7 @@ import { useMemo, useRef, useState, useCallback, useEffect, type ComponentPropsW
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
+import { Copy, Check } from 'lucide-react';
 import { CodeBlock } from './CodeBlock';
 import { CollapsibleSection } from './CollapsibleSection';
 import { FootnoteCard } from './FootnoteCard';
@@ -20,6 +21,54 @@ interface MarkdownViewProps {
   onHeadingsExtracted?: (headings: TocHeading[]) => void;
   zoom?: number;
   projectId?: string;
+}
+
+function TableCopyWrapper({ children }: { children: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const tableRef = useRef<HTMLTableElement | null>(null);
+
+  const handleCopy = useCallback(async () => {
+    const table = tableRef.current;
+    if (!table) return;
+    const rows = table.querySelectorAll('tr');
+    const tsv = Array.from(rows)
+      .map((row) =>
+        Array.from(row.querySelectorAll('th, td'))
+          .map((cell) => cell.textContent?.trim() ?? '')
+          .join('\t'),
+      )
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(tsv);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore if clipboard unavailable
+    }
+  }, []);
+
+  return (
+    <div className="group relative my-4">
+      <button
+        onClick={handleCopy}
+        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent bg-background/80 border border-border z-10"
+        aria-label={copied ? 'Copied table to clipboard' : 'Copy table to clipboard'}
+      >
+        {copied ? (
+          <>
+            <Check className="size-3.5" />
+            <span>Copied</span>
+          </>
+        ) : (
+          <>
+            <Copy className="size-3.5" />
+            <span>Copy</span>
+          </>
+        )}
+      </button>
+      <table ref={tableRef}>{children}</table>
+    </div>
+  );
 }
 
 export function MarkdownView({
@@ -264,6 +313,14 @@ export function MarkdownView({
           );
         }
         return <section {...props}>{children}</section>;
+      },
+
+      table: ({
+        children,
+        node: _node,
+        ...props
+      }: ComponentPropsWithoutRef<'table'> & { node?: unknown }) => {
+        return <TableCopyWrapper {...props}>{children}</TableCopyWrapper>;
       },
 
       img: ({
