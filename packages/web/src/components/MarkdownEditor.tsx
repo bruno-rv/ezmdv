@@ -2,7 +2,8 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { EditorView, type ViewUpdate } from '@codemirror/view';
+import { EditorView, keymap, type ViewUpdate } from '@codemirror/view';
+import { Prec } from '@codemirror/state';
 import { autocompletion } from '@codemirror/autocomplete';
 import { search } from '@codemirror/search';
 import { wikiLinkSource } from '@/lib/wikiLinkCompletion';
@@ -98,10 +99,12 @@ export function MarkdownEditor({ content, theme, onChange, filePaths, projectId 
       search({ top: true }),
       hrAutoFormat(),
       slashMenuField,
-      EditorView.domEventHandlers({
-        keydown(event: KeyboardEvent, view: EditorView) {
+      Prec.highest(keymap.of([{
+        any(view: EditorView, event: KeyboardEvent) {
           return slashCommandKeymap(view, event);
         },
+      }])),
+      EditorView.domEventHandlers({
         ...(projectId
           ? {
               paste(event: ClipboardEvent, view: EditorView) {
