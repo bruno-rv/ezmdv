@@ -8,7 +8,9 @@ import {
   List,
   Maximize2,
   Minimize2,
+  Pause,
   Pencil,
+  Play,
   RefreshCw,
   Save,
   ZoomIn,
@@ -16,7 +18,6 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AutoScrollControls } from '@/components/AutoScrollControls';
 import { EditableZoomPercent } from '@/components/EditableZoomPercent';
 import { cn } from '@/lib/utils';
 
@@ -105,6 +106,107 @@ function ToolbarItem({ icon, label, shortcut, active, disabled, onClick }: Toolb
         <span className="text-[10px] text-muted-foreground">{shortcut}</span>
       )}
     </button>
+  );
+}
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-2 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground first:pt-1">
+      {children}
+    </div>
+  );
+}
+
+interface AutoScrollInlineProps {
+  active: boolean;
+  intervalSeconds: number;
+  scrollPercent: number;
+  onToggle: () => void;
+  onIntervalChange: (v: number) => void;
+  onPercentChange: (v: number) => void;
+}
+
+function AutoScrollInline({
+  active,
+  intervalSeconds,
+  scrollPercent,
+  onToggle,
+  onIntervalChange,
+  onPercentChange,
+}: AutoScrollInlineProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-1 px-2 py-1">
+        <button
+          className={cn(
+            'flex flex-1 items-center gap-2 rounded-md py-0.5 text-xs transition-colors',
+            'hover:text-accent-foreground',
+            active && 'text-accent-foreground',
+          )}
+          onClick={onToggle}
+        >
+          <span className="relative shrink-0 [&_svg]:size-3.5">
+            {active ? <Pause /> : <Play />}
+            {active && (
+              <span className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full bg-blue-500" />
+            )}
+          </span>
+          <span className="flex-1 text-left">Autoscroll</span>
+        </button>
+        <span className="text-[10px] text-muted-foreground">⌘⇧A</span>
+        <button
+          className="rounded p-0.5 hover:bg-accent transition-colors"
+          onClick={() => setExpanded((prev) => !prev)}
+          aria-label="Autoscroll settings"
+        >
+          <ChevronDown className={cn('size-3 transition-transform', expanded && 'rotate-180')} />
+        </button>
+      </div>
+      {expanded && (
+        <div className="space-y-2 px-2 pb-2 pt-1">
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-[10px] text-muted-foreground">Speed</label>
+              <span className="text-[10px] font-mono text-foreground">{intervalSeconds}s</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={120}
+              step={1}
+              value={intervalSeconds}
+              onChange={(e) => onIntervalChange(Number(e.target.value))}
+              className="w-full accent-primary"
+            />
+            <div className="flex justify-between text-[9px] text-muted-foreground">
+              <span>1s (fast)</span>
+              <span>120s (slow)</span>
+            </div>
+          </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-[10px] text-muted-foreground">Scroll amount</label>
+              <span className="text-[10px] font-mono text-foreground">{scrollPercent}%</span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={100}
+              step={1}
+              value={scrollPercent}
+              onChange={(e) => onPercentChange(Number(e.target.value))}
+              className="w-full accent-primary"
+            />
+            <div className="flex justify-between text-[9px] text-muted-foreground">
+              <span>1%</span>
+              <span>100%</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -235,6 +337,7 @@ export function PaneToolbar(props: PaneToolbarProps) {
             {/* Panels */}
             {showPanelActions && (
               <>
+                <SectionHeader>Panels</SectionHeader>
                 <ToolbarItem
                   icon={<List />}
                   label="Table of contents"
@@ -258,8 +361,7 @@ export function PaneToolbar(props: PaneToolbarProps) {
               />
               {metaTooltipContent}
             </div>
-            <div className="my-1 h-px bg-border" />
-            {/* View actions */}
+            <SectionHeader>View</SectionHeader>
             <ToolbarItem
               icon={<RefreshCw />}
               label="Refresh from disk"
@@ -288,10 +390,9 @@ export function PaneToolbar(props: PaneToolbarProps) {
                 onClick={onCloseSplit}
               />
             )}
-            <div className="my-1 h-px bg-border" />
             {/* Zoom */}
             <div className="flex items-center justify-between px-2 py-1">
-              <span className="text-xs text-muted-foreground">Zoom</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Zoom</span>
               <div className="flex items-center gap-1">
                 <button
                   className="rounded p-0.5 hover:bg-accent transition-colors"
@@ -317,18 +418,16 @@ export function PaneToolbar(props: PaneToolbarProps) {
                 </button>
               </div>
             </div>
-            {/* Autoscroll */}
+            {/* Autoscroll — inline */}
             {showPanelActions && (
-              <div className="px-2 py-1">
-                <AutoScrollControls
-                  active={autoScroll.active}
-                  intervalSeconds={autoScroll.intervalSeconds}
-                  scrollPercent={autoScroll.scrollPercent}
-                  onToggle={autoScroll.toggle}
-                  onIntervalChange={autoScroll.setIntervalSeconds}
-                  onPercentChange={autoScroll.setScrollPercent}
-                />
-              </div>
+              <AutoScrollInline
+                active={autoScroll.active}
+                intervalSeconds={autoScroll.intervalSeconds}
+                scrollPercent={autoScroll.scrollPercent}
+                onToggle={autoScroll.toggle}
+                onIntervalChange={autoScroll.setIntervalSeconds}
+                onPercentChange={autoScroll.setScrollPercent}
+              />
             )}
           </ToolbarGroup>
         )}
