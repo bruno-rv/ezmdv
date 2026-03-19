@@ -108,6 +108,7 @@ function App() {
     exitSplitView,
     setFullscreenPane,
     swapPanes,
+    setLayout,
   } = useTabs();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -217,9 +218,11 @@ function App() {
     editContent,
     saving,
     isDirty,
+    livePreview,
     editModeRef,
     setEditMode,
     setEditContent,
+    setLivePreview,
     handleEnterEdit,
     handleExitEdit,
     handleSave,
@@ -236,6 +239,12 @@ function App() {
       handleEnterEdit();
     }
   }, [primaryContent, editMode, handleEnterEdit]);
+
+  useEffect(() => {
+    if (!livePreview && splitView && !editMode) {
+      exitSplitView();
+    }
+  }, [livePreview, splitView, editMode, exitSplitView]);
 
   useEffect(() => {
     if (editMode || splitView || graphProjectId) {
@@ -873,6 +882,22 @@ function App() {
     enterSplitView();
   }, [editMode, enterSplitView, isDirty, setEditMode]);
 
+  const handleToggleLivePreview = useCallback(() => {
+    if (livePreview) {
+      setLivePreview(false);
+      exitSplitView();
+    } else {
+      setLivePreview(true);
+      setLayout((prev) => ({
+        ...prev,
+        splitView: true,
+        secondaryTab: prev.primaryTab,
+        focusedPane: 'primary',
+        fullscreenPane: null,
+      }));
+    }
+  }, [livePreview, setLivePreview, exitSplitView, setLayout]);
+
   const handleTabClick = useCallback(
     (projectId: string, filePath: string) => {
       setGraphProjectId(null);
@@ -918,7 +943,9 @@ function App() {
       const paneState = paneStates[pane];
       const isFocused = focusedPane === pane;
       const isFullscreen = fullscreenPane === pane;
-      const previewOnly = splitView || pane === 'secondary';
+      const previewOnly = livePreview
+        ? pane === 'secondary'
+        : splitView || pane === 'secondary';
 
       if (!tab) {
         return (
@@ -996,7 +1023,7 @@ function App() {
             onZoomSet={(v: number) => handleZoomSet(tab.projectId, tab.filePath, v)}
             onZoomReset={() => handleZoomReset(tab.projectId, tab.filePath)}
             onSave={() => handleSave()}
-            onSaveAndPreview={() => handleSave(true)}
+            onSaveAndPreview={handleToggleLivePreview}
             onSplitView={handleSplitView}
             onEdit={handleEnterEdit}
           />
@@ -1030,7 +1057,7 @@ function App() {
                 ref={pane === 'primary' ? contentScrollRef : undefined}
               >
                 <MarkdownView
-                  content={paneState.content}
+                  content={livePreview && pane === 'secondary' ? editContent : paneState.content}
                   zoom={zoom}
                   projectId={tab.projectId}
                   onLinkClick={(target, kind) => handleLinkClick(pane, target, kind)}

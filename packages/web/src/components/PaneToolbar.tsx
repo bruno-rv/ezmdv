@@ -349,9 +349,8 @@ export function PaneToolbar(props: PaneToolbarProps) {
               variant="ghost"
               size="icon-sm"
               onClick={(e) => { e.stopPropagation(); onSaveAndPreview(); }}
-              disabled={saving}
-              aria-label="Save and preview"
-              title="Save and preview (Ctrl+E)"
+              aria-label="Live preview"
+              title="Toggle live preview"
             >
               <Eye className="size-4" />
             </Button>

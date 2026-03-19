@@ -576,7 +576,7 @@ export function Sidebar({
                                 <MoreVertical className="size-3.5" />
                               </button>
                               {projectMenuId === project.id && (
-                                <div className="absolute right-0 top-full z-50 mt-1 min-w-[140px] rounded-md border border-border bg-popover py-1 text-sm shadow-md">
+                                <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-md border border-border bg-popover py-1 text-sm shadow-md">
                                   <button
                                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-popover-foreground transition-colors hover:bg-muted/50"
                                     onClick={(e) => {
@@ -599,6 +599,58 @@ export function Sidebar({
                                     <Waypoints className="size-3" />
                                     Open Graph
                                   </button>
+                                  <div className="my-1 h-px bg-border" />
+                                  <button
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-popover-foreground transition-colors hover:bg-muted/50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProjectMenuId(null);
+                                      const name = window.prompt('File name (without .md):');
+                                      if (name?.trim()) {
+                                        onCreateFile(project.id, name.trim() + '.md');
+                                      }
+                                    }}
+                                  >
+                                    <FilePlus className="size-3" />
+                                    New File
+                                  </button>
+                                  <button
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-popover-foreground transition-colors hover:bg-muted/50"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setProjectMenuId(null);
+                                      const name = window.prompt('Folder name:');
+                                      if (name?.trim() && onCreateFolder) {
+                                        onCreateFolder(project.id, name.trim());
+                                      }
+                                    }}
+                                  >
+                                    <FolderPlus className="size-3" />
+                                    New Folder
+                                  </button>
+                                  {onUploadToProject && (
+                                    <button
+                                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-popover-foreground transition-colors hover:bg-muted/50"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setProjectMenuId(null);
+                                        const input = document.createElement('input');
+                                        input.type = 'file';
+                                        input.accept = '.md';
+                                        input.multiple = true;
+                                        input.onchange = () => {
+                                          if (input.files && input.files.length > 0) {
+                                            onUploadToProject(project.id, Array.from(input.files));
+                                          }
+                                        };
+                                        input.click();
+                                      }}
+                                    >
+                                      <Upload className="size-3" />
+                                      Upload Files
+                                    </button>
+                                  )}
+                                  <div className="my-1 h-px bg-border" />
                                   <button
                                     className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-destructive transition-colors hover:bg-destructive/10"
                                     onClick={(e) => {

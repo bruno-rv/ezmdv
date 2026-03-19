@@ -20,17 +20,19 @@ export function useEditMode({
   const [saving, setSaving] = useState(false);
   const editModeRef = useRef(false);
 
-  const isDirty = !splitView && editMode && editContent !== primaryContent;
+  const [livePreview, setLivePreview] = useState(false);
+
+  const isDirty = editMode && editContent !== primaryContent;
 
   useEffect(() => {
     editModeRef.current = editMode;
   }, [editMode]);
 
   useEffect(() => {
-    if (splitView && editMode) {
+    if (splitView && editMode && !livePreview) {
       setEditMode(false);
     }
-  }, [editMode, splitView]);
+  }, [editMode, splitView, livePreview]);
 
   const prevPrimaryTabRef = useRef<Tab | null>(null);
   useEffect(() => {
@@ -46,10 +48,10 @@ export function useEditMode({
   }, [primaryTab]);
 
   const handleEnterEdit = useCallback(() => {
-    if (splitView || primaryContent === null) return;
+    if ((splitView && !livePreview) || primaryContent === null) return;
     setEditContent(primaryContent);
     setEditMode(true);
-  }, [primaryContent, splitView]);
+  }, [primaryContent, splitView, livePreview]);
 
   const handleExitEdit = useCallback(async () => {
     if (isDirty && primaryTab && !saving) {
@@ -64,6 +66,7 @@ export function useEditMode({
       }
     }
     setEditMode(false);
+    setLivePreview(false);
   }, [isDirty, primaryTab, saving, editContent, setPaneContent]);
 
   const handleSave = useCallback(
@@ -88,9 +91,11 @@ export function useEditMode({
     editContent,
     saving,
     isDirty,
+    livePreview,
     editModeRef,
     setEditMode,
     setEditContent,
+    setLivePreview,
     handleEnterEdit,
     handleExitEdit,
     handleSave,
