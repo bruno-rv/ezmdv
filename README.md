@@ -22,7 +22,7 @@ It is a monorepo with three packages:
 - Browse markdown files in a sidebar tree
 - Create new `.md` files in-app with inline naming — new files auto-open in edit mode
 - Preview rendered markdown with code highlighting, Mermaid diagrams, KaTeX math, footnotes, and collapsible sections
-- Edit markdown in-app with CodeMirror 6 and save changes — Escape auto-saves and returns to view mode
+- Edit markdown in-app with CodeMirror 6 and save changes — Escape auto-saves and returns to view mode. Live preview available during editing
 - Slash commands (`/`) in the editor for quick markdown insertion (headings, lists, code blocks, tables, and more)
 - Copy-to-clipboard buttons on code blocks and tables
 - Obsidian-style `[[wiki-links]]` with autocomplete while editing
@@ -32,17 +32,18 @@ It is a monorepo with three packages:
 - Graph node preview modal with minimize/maximize/restore controls
 - Per-project and global search with exact and fuzzy modes (trigram + stemming)
 - Refresh from disk button and keyboard shortcut (`Ctrl/Cmd+Shift+R`)
-- Drag-and-drop `.md` files onto the app to upload
+- Drag-and-drop `.md` files onto the app to upload; import entire folders
 - Autoscroll (teleprompter mode) with configurable interval and scroll percentage
 - Customizable keyboard shortcuts — remap any action from the shortcuts modal and changes persist across sessions
 - Per-file zoom (50–200%) in all reading views — zoom level remembered per file across sessions
 - Drag-and-drop projects onto each other to merge as subfolders (no confirmation dialog)
 - Drag a **subfolder** from the file tree onto another project header to merge it into that project
 - Drag a **subfolder** from the file tree to the drop zone below the project list to extract it as a new standalone project
-- Right-click context menu on files and folders for delete (and subfolder creation)
+- Right-click context menu on files, folders, and projects for actions (delete, rename, subfolder creation)
 - Create subfolders within projects directly from the file tree
 - Multi-select projects for bulk delete/open
 - File metadata tooltip (size, line count, dates)
+- Unified toolbar dropdown with all view/panel/zoom controls — Escape closes menu first, then triggers normal actions
 - Light and dark theme
 - Deleted CLI projects are remembered and not re-added on restart
 
@@ -140,14 +141,14 @@ Open `http://localhost:5173` — changes hot-reload instantly via Vite HMR.
 
 ## Tests
 
-201 tests across 20 files using Vitest:
+192 tests across 20 files using Vitest:
 
 ```bash
 npm test
 ```
 
 - **Server** (108 tests, 6 files): state management, path traversal security, markdown graph/search, API routes, file creation, folder creation, file/folder deletion, project merging, subfolder extraction, subfolder merge, fuzzy search (trigrams, stemming, scoring), zoom level persistence, backlinks
-- **Web** (93 tests, 14 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom, ExpandedProjectContent component, GlobalSearch component, command palette, backlinks panel, table of contents, templates, slash commands
+- **Web** (84 tests, 14 files): wiki-links, pane workspace, edit mode, autoscroll, graph filtering, autocomplete, graph zoom, ExpandedProjectContent component, GlobalSearch component, command palette, backlinks panel, table of contents, templates, slash commands
 
 ## Local Data
 
