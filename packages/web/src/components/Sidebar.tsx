@@ -60,7 +60,6 @@ interface SidebarProps {
   onCreateFile: (projectId: string, filePath: string, content?: string) => void;
   onShowShortcuts: () => void;
   onCreateProject?: (name: string) => void;
-  onOpenFolder?: (path: string) => void;
 }
 
 export function Sidebar({
@@ -91,7 +90,6 @@ export function Sidebar({
   onCreateFile,
   onShowShortcuts,
   onCreateProject,
-  onOpenFolder,
 }: SidebarProps) {
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== 'undefined'
@@ -115,7 +113,6 @@ export function Sidebar({
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [folderPathValue, setFolderPathValue] = useState('');
   const extractDropCounter = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -287,6 +284,20 @@ export function Sidebar({
       if (files && files.length > 0) {
         onUploadFiles(Array.from(files));
       }
+      e.target.value = '';
+    },
+    [onUploadFiles],
+  );
+
+  const handleFolderUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const fileList = e.target.files;
+      if (!fileList || fileList.length === 0) return;
+      const allFiles = Array.from(fileList);
+      const mdFiles = allFiles.filter((f) => f.name.toLowerCase().endsWith('.md'));
+      if (mdFiles.length === 0) return;
+      const relativePaths = mdFiles.map((f) => (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name);
+      onUploadFiles(mdFiles, relativePaths);
       e.target.value = '';
     },
     [onUploadFiles],
@@ -911,10 +922,10 @@ export function Sidebar({
                     onClick={() => setImportOpen((v) => !v)}
                   >
                     <Upload className="size-3" />
-                    Import
+                    Import MDs
                   </button>
                   {importOpen && (
-                    <div className="mt-1 rounded-md border border-border bg-popover p-2 shadow-lg space-y-2">
+                    <div className="mt-1 rounded-md border border-border bg-popover p-1 shadow-lg">
                       <button
                         className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-accent"
                         onClick={() => {
@@ -923,54 +934,18 @@ export function Sidebar({
                         }}
                       >
                         <FilePlus className="size-3.5 text-muted-foreground" />
-                        <div className="text-left">
-                          <div className="font-medium">Select files</div>
-                          <div className="text-[10px] text-muted-foreground">Pick .md files to import as copies</div>
-                        </div>
+                        Files
                       </button>
-                      <div className="h-px bg-border" />
-                      <div className="px-2 py-1">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <FolderOpen className="size-3.5 text-muted-foreground" />
-                          <div>
-                            <div className="text-xs font-medium text-foreground">Open folder</div>
-                            <div className="text-[10px] text-muted-foreground">Reference original files on disk</div>
-                          </div>
-                        </div>
-                        <form
-                          className="flex gap-1"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            const trimmed = folderPathValue.trim();
-                            if (trimmed && onOpenFolder) {
-                              onOpenFolder(trimmed);
-                              setFolderPathValue('');
-                              setImportOpen(false);
-                            }
-                          }}
-                        >
-                          <input
-                            ref={folderInputRef}
-                            type="text"
-                            className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
-                            placeholder="/path/to/folder"
-                            value={folderPathValue}
-                            onChange={(e) => setFolderPathValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') {
-                                setImportOpen(false);
-                                setFolderPathValue('');
-                              }
-                            }}
-                          />
-                          <button
-                            type="submit"
-                            className="rounded bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
-                          >
-                            Open
-                          </button>
-                        </form>
-                      </div>
+                      <button
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-accent"
+                        onClick={() => {
+                          folderInputRef.current?.click();
+                          setImportOpen(false);
+                        }}
+                      >
+                        <FolderOpen className="size-3.5 text-muted-foreground" />
+                        Folder
+                      </button>
                     </div>
                   )}
                 </div>
@@ -982,6 +957,14 @@ export function Sidebar({
                   multiple
                   className="hidden"
                   onChange={handleFileUpload}
+                />
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  {...{ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>}
+                  multiple
+                  className="hidden"
+                  onChange={handleFolderUpload}
                 />
               </div>
             ) : null}

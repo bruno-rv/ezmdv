@@ -662,25 +662,6 @@ function App() {
     [addProject, loadProjectFiles, loadProjects],
   );
 
-  const handleOpenFolder = useCallback(
-    async (folderPath: string) => {
-      try {
-        const name = folderPath.split('/').filter(Boolean).pop() || 'Project';
-        const project = await addProject({
-          name,
-          path: folderPath,
-          source: 'cli',
-        });
-        await loadProjects();
-        await loadProjectFiles(project.id);
-        setAutoExpandProjectId(project.id);
-      } catch (error) {
-        console.error('Open folder failed:', error);
-      }
-    },
-    [addProject, loadProjectFiles, loadProjects],
-  );
-
   const handleCreateFile = useCallback(
     async (projectId: string, filePath: string, content?: string) => {
       try {
@@ -1248,7 +1229,6 @@ function App() {
           onCreateFile={handleCreateFile}
           onShowShortcuts={() => setShowShortcuts(true)}
           onCreateProject={(name) => addProject({ name, path: '', source: 'upload' })}
-          onOpenFolder={handleOpenFolder}
         />
       )}
 
