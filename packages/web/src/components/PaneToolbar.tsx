@@ -8,7 +8,6 @@ import {
   List,
   Maximize2,
   Minimize2,
-  Pencil,
   RefreshCw,
   Save,
   ZoomIn,
@@ -19,7 +18,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { AutoScrollControls } from '@/components/AutoScrollControls';
 import { EditableZoomPercent } from '@/components/EditableZoomPercent';
-import { ModeToggle } from '@/components/ModeToggle';
 import { cn } from '@/lib/utils';
 
 interface ToolbarGroupProps {
@@ -208,20 +206,13 @@ export function PaneToolbar(props: PaneToolbarProps) {
 
       <span className="min-w-0 flex-1" />
 
-      {/* Mode toggle */}
+      {/* Mode indicator */}
       {!isFullscreen && (
-        <ModeToggle
-          mode={editMode ? 'edit' : splitContext ? 'split' : 'raw'}
-          onModeChange={(mode) => {
-            if (mode === 'edit') onEdit();
-            else if (mode === 'split') onSplitView();
-            else if (mode === 'raw') {
-              if (editMode) onSaveAndPreview();
-              else if (splitContext) onCloseSplit();
-            }
-          }}
-          editDisabled={previewOnly || splitContext}
-        />
+        <span className="inline-flex rounded-lg bg-muted/50 p-0.5">
+          <span className="rounded-md bg-background px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-foreground shadow-sm">
+            {editMode ? 'EDIT' : splitContext ? 'SPLIT' : 'RAW'}
+          </span>
+        </span>
       )}
 
       {/* Right side: grouped icons - hidden until hover */}
@@ -368,16 +359,6 @@ export function PaneToolbar(props: PaneToolbarProps) {
               <span className="text-xs font-medium text-amber-500">Unsaved</span>
             )}
           </>
-        ) : !editMode && !previewOnly ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={(e) => { e.stopPropagation(); onEdit(); }}
-            aria-label="Edit file"
-            title="Edit (Ctrl+E)"
-          >
-            <Pencil className="size-4" />
-          </Button>
         ) : null}
       </div>
     </div>
