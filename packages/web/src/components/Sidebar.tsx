@@ -60,6 +60,7 @@ interface SidebarProps {
   onCreateFile: (projectId: string, filePath: string, content?: string) => void;
   onShowShortcuts: () => void;
   onCreateProject?: (name: string) => void;
+  onOpenFolder?: (path: string) => void;
 }
 
 export function Sidebar({
@@ -90,6 +91,7 @@ export function Sidebar({
   onCreateFile,
   onShowShortcuts,
   onCreateProject,
+  onOpenFolder,
 }: SidebarProps) {
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== 'undefined'
@@ -112,9 +114,12 @@ export function Sidebar({
   const [extractDropActive, setExtractDropActive] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
+  const [openFolderMode, setOpenFolderMode] = useState(false);
+  const [folderPathValue, setFolderPathValue] = useState('');
   const extractDropCounter = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const effectiveCollapsed = collapsed && isDesktop;
 
   const handleResizeStart = useCallback(
@@ -907,6 +912,51 @@ export function Sidebar({
                   <Upload className="size-3" />
                   Upload files
                 </button>
+
+                {openFolderMode ? (
+                  <form
+                    className="flex gap-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const trimmed = folderPathValue.trim();
+                      if (trimmed && onOpenFolder) {
+                        onOpenFolder(trimmed);
+                        setFolderPathValue('');
+                        setOpenFolderMode(false);
+                      }
+                    }}
+                  >
+                    <input
+                      ref={folderInputRef}
+                      type="text"
+                      className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
+                      placeholder="/path/to/folder"
+                      value={folderPathValue}
+                      onChange={(e) => setFolderPathValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setOpenFolderMode(false);
+                          setFolderPathValue('');
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      className="rounded bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      Open
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    className="flex w-full items-center justify-center gap-1.5 rounded-md py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                    onClick={() => setOpenFolderMode(true)}
+                  >
+                    <FolderOpen className="size-3" />
+                    Open folder
+                  </button>
+                )}
 
                 <input
                   ref={fileInputRef}

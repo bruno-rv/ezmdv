@@ -1,6 +1,7 @@
 import { ZoomIn, ZoomOut, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MarkdownView } from '@/components/MarkdownView';
+import { EditableZoomPercent } from '@/components/EditableZoomPercent';
 
 const noop = () => {};
 
@@ -11,6 +12,7 @@ interface GraphPreviewModalProps {
   projectId?: string;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onZoomSet: (value: number) => void;
   onZoomReset: () => void;
   onClose: () => void;
 }
@@ -22,6 +24,7 @@ export function GraphPreviewModal({
   projectId,
   onZoomIn,
   onZoomOut,
+  onZoomSet,
   onZoomReset,
   onClose,
 }: GraphPreviewModalProps) {
@@ -42,13 +45,13 @@ export function GraphPreviewModal({
             >
               <ZoomOut className="size-4" />
             </Button>
-            <button
-              className="min-w-[3rem] text-center text-xs text-muted-foreground tabular-nums select-none"
-              onDoubleClick={onZoomReset}
-              title="Double-click to reset zoom"
-            >
-              {Math.round(zoom * 100)}%
-            </button>
+            <EditableZoomPercent
+              zoom={zoom}
+              min={0.5}
+              max={2}
+              onZoomSet={onZoomSet}
+              onZoomReset={onZoomReset}
+            />
             <Button
               variant="ghost"
               size="icon-sm"
