@@ -168,10 +168,6 @@ export function createProjectRoutes(statePath?: string): Router {
         res.status(400).json({ error: 'path is required for non-upload projects' });
         return;
       }
-      if (!fs.existsSync(projectPath)) {
-        res.status(400).json({ error: 'path does not exist on disk' });
-        return;
-      }
       resolvedPath = projectPath;
     }
 
