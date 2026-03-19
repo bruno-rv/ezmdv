@@ -54,7 +54,19 @@ interface PreviewState {
 
 const HOVER_DELAY_MS = 5000;
 
-function buildLayout(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
+interface LayoutParams {
+  gravity: number;
+  linkDistance: number;
+  repulsion: number;
+}
+
+const DEFAULT_LAYOUT_PARAMS: LayoutParams = {
+  gravity: 0.014,
+  linkDistance: 150,
+  repulsion: 3800,
+};
+
+function buildLayout(nodes: GraphNode[], edges: GraphEdge[], params: LayoutParams = DEFAULT_LAYOUT_PARAMS): PositionedNode[] {
   if (nodes.length === 0) return [];
 
   const positioned = nodes.map((node, index) => {
@@ -67,6 +79,7 @@ function buildLayout(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
   });
 
   const nodeIndex = new Map(positioned.map((node, index) => [node.id, index]));
+  const springConstant = 0.012;
 
   for (let iteration = 0; iteration < 140; iteration++) {
     const next = positioned.map((node) => ({ ...node }));
@@ -76,7 +89,7 @@ function buildLayout(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
         const dx = next[j].x - next[i].x;
         const dy = next[j].y - next[i].y;
         const distanceSq = dx * dx + dy * dy + 0.01;
-        const force = Math.min(3800 / distanceSq, 18);
+        const force = Math.min(params.repulsion / distanceSq, 18);
         const distance = Math.sqrt(distanceSq);
         const offsetX = (dx / distance) * force;
         const offsetY = (dy / distance) * force;
@@ -96,8 +109,8 @@ function buildLayout(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
       const dx = target.x - source.x;
       const dy = target.y - source.y;
       const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-      const desired = edge.kind === 'wiki' ? 150 : 120;
-      const spring = (distance - desired) * 0.012;
+      const desired = edge.kind === 'wiki' ? params.linkDistance : params.linkDistance * 0.8;
+      const spring = (distance - desired) * springConstant;
       const offsetX = (dx / distance) * spring;
       const offsetY = (dy / distance) * spring;
       source.x += offsetX;
@@ -107,8 +120,8 @@ function buildLayout(nodes: GraphNode[], edges: GraphEdge[]): PositionedNode[] {
     }
 
     for (const node of next) {
-      node.x += (WIDTH / 2 - node.x) * 0.014;
-      node.y += (HEIGHT / 2 - node.y) * 0.014;
+      node.x += (WIDTH / 2 - node.x) * params.gravity;
+      node.y += (HEIGHT / 2 - node.y) * params.gravity;
       node.x = Math.min(WIDTH - 30, Math.max(30, node.x));
       node.y = Math.min(HEIGHT - 30, Math.max(30, node.y));
     }
@@ -168,6 +181,7 @@ export function GraphPanel({
   const [zoom, setZoom] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const panStateRef = useRef<PanState | null>(null);
+  const [layoutParams, setLayoutParams] = useState<LayoutParams>(DEFAULT_LAYOUT_PARAMS);
 
   useEffect(() => {
     setDraggedPositions(new Map());
@@ -179,6 +193,10 @@ export function GraphPanel({
     setZoom(1);
     setPanOffset({ x: 0, y: 0 });
   }, [graph]);
+
+  useEffect(() => {
+    setDraggedPositions(new Map());
+  }, [layoutParams]);
 
   useEffect(() => {
     if (!searchQuery.trim()) { setSearchMatches(null); setSearching(false); return; }
@@ -216,8 +234,8 @@ export function GraphPanel({
   const filteredGraph = useMemo(() => filterGraphBySearch(graph, searchMatches), [graph, searchMatches]);
 
   const positionedNodes = useMemo(
-    () => buildLayout(filteredGraph?.nodes ?? [], filteredGraph?.edges ?? []),
-    [filteredGraph],
+    () => buildLayout(filteredGraph?.nodes ?? [], filteredGraph?.edges ?? [], layoutParams),
+    [filteredGraph, layoutParams],
   );
 
   const effectiveNodes = useMemo(
@@ -642,18 +660,51 @@ export function GraphPanel({
               <SlidersHorizontal className="size-4 text-muted-foreground" />
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Display Engine</span>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Gravity</span>
-                <span className="text-xs font-medium text-foreground">0.45</span>
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Gravity</span>
+                  <span className="text-xs font-medium text-foreground tabular-nums">{layoutParams.gravity.toFixed(3)}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.002"
+                  max="0.06"
+                  step="0.002"
+                  value={layoutParams.gravity}
+                  onChange={(e) => setLayoutParams((p) => ({ ...p, gravity: parseFloat(e.target.value) }))}
+                  className="w-full h-1 accent-primary cursor-pointer"
+                />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Link Distance</span>
-                <span className="text-xs font-medium text-foreground">280px</span>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Link Distance</span>
+                  <span className="text-xs font-medium text-foreground tabular-nums">{layoutParams.linkDistance}px</span>
+                </div>
+                <input
+                  type="range"
+                  min="50"
+                  max="400"
+                  step="10"
+                  value={layoutParams.linkDistance}
+                  onChange={(e) => setLayoutParams((p) => ({ ...p, linkDistance: parseInt(e.target.value, 10) }))}
+                  className="w-full h-1 accent-primary cursor-pointer"
+                />
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Repulsion</span>
-                <span className="text-xs font-medium text-foreground">1.2k</span>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Repulsion</span>
+                  <span className="text-xs font-medium text-foreground tabular-nums">{layoutParams.repulsion >= 1000 ? `${(layoutParams.repulsion / 1000).toFixed(1)}k` : layoutParams.repulsion}</span>
+                </div>
+                <input
+                  type="range"
+                  min="500"
+                  max="10000"
+                  step="100"
+                  value={layoutParams.repulsion}
+                  onChange={(e) => setLayoutParams((p) => ({ ...p, repulsion: parseInt(e.target.value, 10) }))}
+                  className="w-full h-1 accent-primary cursor-pointer"
+                />
               </div>
             </div>
             <div className="my-2 h-px bg-border" />
@@ -676,7 +727,7 @@ export function GraphPanel({
               </div>
             </div>
             <div className="mt-3 flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={handleZoomReset}>
+              <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => { handleZoomReset(); setLayoutParams(DEFAULT_LAYOUT_PARAMS); }}>
                 Reset View
               </Button>
               <Button size="sm" className="flex-1 bg-primary text-primary-foreground text-xs" onClick={() => {
