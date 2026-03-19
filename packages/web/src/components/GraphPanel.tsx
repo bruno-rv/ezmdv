@@ -488,7 +488,7 @@ export function GraphPanel({
             viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
             className={cn(
               'h-full w-full select-none',
-              dragState || panStateRef.current ? 'cursor-grabbing' : '',
+              dragState || panStateRef.current ? 'cursor-grabbing' : 'cursor-grab',
             )}
             overflow="visible"
             role="img"
@@ -523,19 +523,16 @@ export function GraphPanel({
               width={viewBox.w * 3} height={viewBox.h * 3}
               fill="transparent"
               onMouseDown={(e) => {
-                if (e.shiftKey || e.button === 1) {
-                  e.preventDefault();
-                  const coords = getSVGCoords(e, svgRef);
-                  if (!coords) return;
-                  panStateRef.current = {
-                    startX: coords.x,
-                    startY: coords.y,
-                    startPanX: panOffset.x,
-                    startPanY: panOffset.y,
-                  };
-                } else {
-                  setSelectedNodeId(null);
-                }
+                e.preventDefault();
+                setSelectedNodeId(null);
+                const coords = getSVGCoords(e, svgRef);
+                if (!coords) return;
+                panStateRef.current = {
+                  startX: coords.x,
+                  startY: coords.y,
+                  startPanX: panOffset.x,
+                  startPanY: panOffset.y,
+                };
               }}
             />
 
@@ -733,8 +730,18 @@ export function GraphPanel({
               <Button size="sm" className="flex-1 bg-primary text-primary-foreground text-xs" onClick={() => {
                 const svg = svgRef.current;
                 if (!svg) return;
+                const clone = svg.cloneNode(true) as SVGSVGElement;
+                const isDark = document.documentElement.classList.contains('dark');
+                const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                const vb = clone.getAttribute('viewBox')?.split(' ').map(Number) ?? [0, 0, WIDTH, HEIGHT];
+                bgRect.setAttribute('x', String(vb[0]));
+                bgRect.setAttribute('y', String(vb[1]));
+                bgRect.setAttribute('width', String(vb[2]));
+                bgRect.setAttribute('height', String(vb[3]));
+                bgRect.setAttribute('fill', isDark ? '#0a0a0a' : '#ffffff');
+                clone.insertBefore(bgRect, clone.firstChild);
                 const serializer = new XMLSerializer();
-                const svgStr = serializer.serializeToString(svg);
+                const svgStr = serializer.serializeToString(clone);
                 const blob = new Blob([svgStr], { type: 'image/svg+xml' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');

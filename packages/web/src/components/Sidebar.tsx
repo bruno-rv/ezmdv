@@ -15,9 +15,7 @@ import {
   Keyboard,
   FolderPlus,
   FolderTree,
-  Search,
   Waypoints,
-  LayoutGrid,
   MoreVertical,
   FilePlus,
   HardDrive,
@@ -28,7 +26,6 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ExpandedProjectContent } from '@/components/ExpandedProjectContent';
-import { GlobalSearch } from '@/components/GlobalSearch';
 import type { ProjectWithFiles } from '@/hooks/useProjects';
 import type { Tab } from '@/lib/api';
 
@@ -96,7 +93,6 @@ export function Sidebar({
       ? window.matchMedia('(min-width: 768px)').matches
       : true,
   );
-  const [sidebarMode, setSidebarMode] = useState<'explorer' | 'search' | 'graph' | 'layout'>('explorer');
   const [projectMenuId, setProjectMenuId] = useState<string | null>(null);
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const [expandedProjects, setExpandedProjects] = useState<
@@ -106,7 +102,6 @@ export function Sidebar({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
-  const [globalFilter, setGlobalFilter] = useState<Map<string, Set<string>> | null>(null);
   const [dropTargetProjectId, setDropTargetProjectId] = useState<string | null>(null);
   const [isFolderDragging, setIsFolderDragging] = useState(false);
   const [extractDropActive, setExtractDropActive] = useState(false);
@@ -170,13 +165,6 @@ export function Sidebar({
       setRenamingId(null);
     }
   }, [effectiveCollapsed]);
-
-  useEffect(() => {
-    if (!globalFilter) return;
-    for (const projectId of globalFilter.keys()) {
-      onExpandProject(projectId);
-    }
-  }, [globalFilter, onExpandProject]);
 
   useEffect(() => {
     const reset = () => {
@@ -278,9 +266,17 @@ export function Sidebar({
 
   const handleFileUpload = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = e.target.files;
-      if (files && files.length > 0) {
-        onUploadFiles(Array.from(files));
+      const fileList = e.target.files;
+      if (!fileList || fileList.length === 0) { e.target.value = ''; return; }
+      const allFiles = Array.from(fileList);
+      const mdFiles = allFiles.filter((f) => f.name.toLowerCase().endsWith('.md'));
+      if (mdFiles.length === 0) { e.target.value = ''; return; }
+      const hasRelativePaths = mdFiles.some((f) => (f as File & { webkitRelativePath?: string }).webkitRelativePath);
+      if (hasRelativePaths) {
+        const relativePaths = mdFiles.map((f) => (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name);
+        onUploadFiles(mdFiles, relativePaths);
+      } else {
+        onUploadFiles(mdFiles);
       }
       e.target.value = '';
     },
@@ -383,36 +379,6 @@ export function Sidebar({
           </div>
         </div>
 
-        {/* Icon tab bar */}
-        {!effectiveCollapsed && (
-          <div className="flex items-center gap-1 border-b border-border px-3 py-2">
-            {([
-              { mode: 'explorer' as const, icon: FolderTree, label: 'Explorer' },
-              { mode: 'search' as const, icon: Search, label: 'Search' },
-              { mode: 'graph' as const, icon: Waypoints, label: 'Graph' },
-              { mode: 'layout' as const, icon: LayoutGrid, label: 'Layout' },
-            ] as const).map(({ mode, icon: Icon, label }) => (
-              <button
-                key={mode}
-                className={cn(
-                  'flex-1 flex items-center justify-center rounded-md p-2 transition-colors',
-                  sidebarMode === mode
-                    ? 'bg-primary/15 text-primary'
-                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-                )}
-                onClick={() => {
-                  if (mode !== 'search') setGlobalFilter(null);
-                  setSidebarMode(mode);
-                }}
-                title={label}
-                aria-label={label}
-              >
-                <Icon className="size-4" />
-              </button>
-            ))}
-          </div>
-        )}
-
         {effectiveCollapsed ? (
           <div className="hidden flex-1 items-center justify-center md:flex">
             <button
@@ -422,130 +388,6 @@ export function Sidebar({
             >
               <PanelLeftOpen className="size-4" />
             </button>
-          </div>
-        ) : sidebarMode === 'search' ? (
-          <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="px-4 py-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Search</span>
-            </div>
-            <div className="pt-1">
-              <GlobalSearch onFilterChange={setGlobalFilter} />
-            </div>
-            {globalFilter && globalFilter.size > 0 && (
-              <div className="flex-1 overflow-y-auto px-2 py-2">
-                {projects
-                  .filter((p) => globalFilter.has(p.id))
-                  .map((project) => (
-                    <div key={project.id} className="mb-1">
-                      <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-muted-foreground">
-                        <FolderTree className="size-3" />
-                        <span>{project.name}</span>
-                      </div>
-                      <div className="ml-1">
-                        <ExpandedProjectContent
-                          project={project}
-                          activeTab={activeTab}
-                          onFileClick={onFileClick}
-                          onOpenGraph={onOpenGraph}
-                          onCreateFile={onCreateFile}
-                          onCreateFolder={onCreateFolder}
-                          onDeleteFile={onDeleteFile}
-                          onUploadToProject={onUploadToProject}
-                          globalFilter={globalFilter?.get(project.id)}
-                          draggable={!!onMoveFile}
-                          onFolderDragStart={() => setIsFolderDragging(true)}
-                          onFolderDragEnd={() => {
-                            setIsFolderDragging(false);
-                            setExtractDropActive(false);
-                            extractDropCounter.current = 0;
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-            {globalFilter && globalFilter.size === 0 && (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">No matching files found</p>
-            )}
-          </div>
-        ) : sidebarMode === 'graph' ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-            <Waypoints className="size-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Select a project to view its graph</p>
-            <div className="flex w-full flex-col gap-1">
-              {projects.map((project) => (
-                <button
-                  key={project.id}
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                  onClick={() => onOpenGraph(project.id)}
-                >
-                  <Waypoints className="size-3.5" />
-                  <span className="truncate">{project.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : sidebarMode === 'layout' ? (
-          <div className="flex flex-1 flex-col gap-3 px-4 py-4">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Layout</span>
-            <div className="flex flex-col gap-1">
-              {onCreateProject && (
-                <button
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                  onClick={() => {
-                    const name = window.prompt('Project name:');
-                    if (name?.trim()) onCreateProject(name.trim());
-                  }}
-                >
-                  <FolderPlus className="size-4" />
-                  <span>New project</span>
-                </button>
-              )}
-              <button
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Upload className="size-4" />
-                <span>Upload files</span>
-              </button>
-              {projects.length > 0 && !selectMode && (
-                <button
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                  onClick={() => {
-                    setSelectMode(true);
-                    setSidebarMode('explorer');
-                  }}
-                >
-                  <ListChecks className="size-4" />
-                  <span>Select projects</span>
-                </button>
-              )}
-            </div>
-
-            {projects.length > 0 && (
-              <>
-                <span className="mt-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Projects</span>
-                <div className="flex flex-col gap-0.5">
-                  {projects.map((project) => (
-                    <button
-                      key={project.id}
-                      className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                      onClick={() => {
-                        setSidebarMode('explorer');
-                        toggleProject(project.id);
-                      }}
-                    >
-                      <ChevronRight className="size-3.5" />
-                      <span className="truncate">{project.name}</span>
-                      <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground/60">
-                        {project.source === 'cli' ? 'CLI' : 'Local'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
           </div>
         ) : (
           <>
@@ -911,7 +753,7 @@ export function Sidebar({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".md"
+                  {...{ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>}
                   multiple
                   className="hidden"
                   onChange={handleFileUpload}
