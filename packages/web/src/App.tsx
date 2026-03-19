@@ -1151,7 +1151,6 @@ function App() {
 
   const showSidebar = fullscreenPane === null;
   const showTopChrome = fullscreenPane === null;
-  const appMode = graphProjectId ? 'visualize' as const : 'edit' as const;
   const activeZoom = activeTab ? getZoom(activeTab.projectId, activeTab.filePath) : 1;
   const fullscreenTarget = fullscreenPane ? getPaneTab(fullscreenPane) : null;
   const graphProject = graphProjectId
@@ -1210,15 +1209,6 @@ function App() {
     >
       {showTopChrome && (
         <TopHeader
-          mode={appMode}
-          onModeChange={(mode) => {
-            if (mode === 'visualize') {
-              const projectId = activeTab?.projectId ?? projects[0]?.id;
-              if (projectId) handleOpenGraph(projectId);
-            } else {
-              setGraphProjectId(null);
-            }
-          }}
           zoom={activeZoom}
           onSearchClick={() => setCommandPaletteOpen(true)}
           onMenuClick={() => setSidebarOpen(true)}
