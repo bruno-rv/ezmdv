@@ -447,5 +447,6 @@ export function useTabs() {
     exitSplitView,
     setFullscreenPane,
     swapPanes,
+    setLayout,
   };
 }
