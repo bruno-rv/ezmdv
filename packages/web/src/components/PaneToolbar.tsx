@@ -8,11 +8,11 @@ import {
   List,
   Maximize2,
   Minimize2,
+  Pencil,
   RefreshCw,
   Save,
   ZoomIn,
   ZoomOut,
-  LayoutDashboard,
   SlidersHorizontal,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -217,13 +217,49 @@ export function PaneToolbar(props: PaneToolbarProps) {
 
       {/* Right side: grouped icons - hidden until hover */}
       <div className="flex items-center gap-1 opacity-0 group-hover/toolbar:opacity-100 transition-opacity duration-200">
-        {/* View group: zoom, fullscreen, refresh, split */}
         {showViewGroup && (
           <ToolbarGroup
-            icon={<LayoutDashboard className="size-4" />}
-            label="View"
-            hasActiveChild={isFullscreen || zoom !== 1}
+            icon={<SlidersHorizontal className="size-4" />}
+            label="Panels"
+            hasActiveChild={tocOpen || backlinksOpen || isFullscreen || zoom !== 1}
           >
+            {/* Edit */}
+            {!editMode && !previewOnly && !splitContext && (
+              <ToolbarItem
+                icon={<Pencil />}
+                label="Edit"
+                shortcut="⌘E"
+                onClick={onEdit}
+              />
+            )}
+            {/* Panels */}
+            {showPanelActions && (
+              <>
+                <ToolbarItem
+                  icon={<List />}
+                  label="Table of contents"
+                  shortcut="⌘⇧T"
+                  active={tocOpen}
+                  onClick={onToggleToc}
+                />
+                <ToolbarItem
+                  icon={<Link2 />}
+                  label="Backlinks"
+                  active={backlinksOpen}
+                  onClick={onToggleBacklinks}
+                />
+              </>
+            )}
+            <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+              <ToolbarItem
+                icon={<Info />}
+                label="File info"
+                onClick={onFileInfo}
+              />
+              {metaTooltipContent}
+            </div>
+            <div className="my-1 h-px bg-border" />
+            {/* View actions */}
             <ToolbarItem
               icon={<RefreshCw />}
               label="Refresh from disk"
@@ -253,6 +289,7 @@ export function PaneToolbar(props: PaneToolbarProps) {
               />
             )}
             <div className="my-1 h-px bg-border" />
+            {/* Zoom */}
             <div className="flex items-center justify-between px-2 py-1">
               <span className="text-xs text-muted-foreground">Zoom</span>
               <div className="flex items-center gap-1">
@@ -280,60 +317,23 @@ export function PaneToolbar(props: PaneToolbarProps) {
                 </button>
               </div>
             </div>
-          </ToolbarGroup>
-        )}
-
-        {/* Panels group: TOC, backlinks, info */}
-        {showViewGroup && (
-          <ToolbarGroup
-            icon={<SlidersHorizontal className="size-4" />}
-            label="Panels"
-            hasActiveChild={tocOpen || backlinksOpen}
-          >
+            {/* Autoscroll */}
             {showPanelActions && (
-              <>
-                <ToolbarItem
-                  icon={<List />}
-                  label="Table of contents"
-                  shortcut="⌘⇧T"
-                  active={tocOpen}
-                  onClick={onToggleToc}
+              <div className="px-2 py-1">
+                <AutoScrollControls
+                  active={autoScroll.active}
+                  intervalSeconds={autoScroll.intervalSeconds}
+                  scrollPercent={autoScroll.scrollPercent}
+                  onToggle={autoScroll.toggle}
+                  onIntervalChange={autoScroll.setIntervalSeconds}
+                  onPercentChange={autoScroll.setScrollPercent}
                 />
-                <ToolbarItem
-                  icon={<Link2 />}
-                  label="Backlinks"
-                  active={backlinksOpen}
-                  onClick={onToggleBacklinks}
-                />
-              </>
-            )}
-            <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
-              <ToolbarItem
-                icon={<Info />}
-                label="File info"
-                onClick={onFileInfo}
-              />
-              {metaTooltipContent}
-            </div>
-            {showPanelActions && (
-              <>
-                <div className="my-1 h-px bg-border" />
-                <div className="px-2 py-1">
-                  <AutoScrollControls
-                    active={autoScroll.active}
-                    intervalSeconds={autoScroll.intervalSeconds}
-                    scrollPercent={autoScroll.scrollPercent}
-                    onToggle={autoScroll.toggle}
-                    onIntervalChange={autoScroll.setIntervalSeconds}
-                    onPercentChange={autoScroll.setScrollPercent}
-                  />
-                </div>
-              </>
+              </div>
             )}
           </ToolbarGroup>
         )}
 
-        {/* Always-visible action buttons */}
+        {/* Edit mode action buttons */}
         {showEditActions ? (
           <>
             <Button
