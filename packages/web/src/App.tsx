@@ -1210,7 +1210,6 @@ function App() {
       {showTopChrome && (
         <TopHeader
           zoom={activeZoom}
-          projects={projects}
           onFileClick={handleFileClick}
           onMenuClick={() => setSidebarOpen(true)}
           showMenu={showSidebar}

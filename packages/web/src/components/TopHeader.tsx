@@ -1,59 +1,18 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Search,
   Menu,
   File,
   X,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { FileTreeEntry } from '@/lib/api';
-import type { ProjectWithFiles } from '@/hooks/useProjects';
-
-function flattenFiles(
-  entries: FileTreeEntry[],
-  projectId: string,
-  projectName: string,
-): Array<{ projectId: string; projectName: string; path: string; name: string }> {
-  const result: Array<{ projectId: string; projectName: string; path: string; name: string }> = [];
-  for (const entry of entries) {
-    if (entry.type === 'file') {
-      result.push({ projectId, projectName, path: entry.path, name: entry.name });
-    } else if (entry.children) {
-      result.push(...flattenFiles(entry.children, projectId, projectName));
-    }
-  }
-  return result;
-}
-
-function fuzzyMatch(query: string, text: string): { match: boolean; score: number } {
-  const q = query.toLowerCase();
-  const t = text.toLowerCase();
-
-  if (t.includes(q)) {
-    const idx = t.indexOf(q);
-    return { match: true, score: 100 - idx + (q.length / t.length) * 50 };
-  }
-
-  let qi = 0;
-  let score = 0;
-  let prevMatchIdx = -2;
-  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
-    if (t[ti] === q[qi]) {
-      score += 10;
-      if (ti === prevMatchIdx + 1) score += 5;
-      if (ti === 0 || t[ti - 1] === '/' || t[ti - 1] === ' ' || t[ti - 1] === '-' || t[ti - 1] === '_') score += 8;
-      prevMatchIdx = ti;
-      qi++;
-    }
-  }
-
-  return { match: qi === q.length, score };
-}
+import { searchAllProjects } from '@/lib/api';
+import type { GlobalSearchResult } from '@/lib/api';
 
 interface TopHeaderProps {
   zoom: number;
-  projects: ProjectWithFiles[];
   onFileClick: (projectId: string, filePath: string) => void;
   onMenuClick?: () => void;
   showMenu?: boolean;
@@ -61,7 +20,6 @@ interface TopHeaderProps {
 
 export function TopHeader({
   zoom,
-  projects,
   onFileClick,
   onMenuClick,
   showMenu,
@@ -69,46 +27,48 @@ export function TopHeader({
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [results, setResults] = useState<GlobalSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const queryIdRef = useRef(0);
 
-  const allFiles = useMemo(() => {
-    const files: Array<{ projectId: string; projectName: string; path: string; name: string }> = [];
-    for (const p of projects) {
-      if (p.files) {
-        files.push(...flattenFiles(p.files, p.id, p.name));
-      }
-    }
-    return files;
-  }, [projects]);
-
-  const results = useMemo(() => {
+  // Debounced server-side search
+  useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) return [];
-
-    const items: Array<{
-      projectId: string;
-      projectName: string;
-      path: string;
-      name: string;
-      score: number;
-    }> = [];
-
-    for (const file of allFiles) {
-      const combined = `${file.name} ${file.projectName} ${file.path}`;
-      const { match, score } = fuzzyMatch(trimmed, combined);
-      if (match) {
-        items.push({ ...file, score });
-      }
+    if (!trimmed) {
+      setResults([]);
+      setSearching(false);
+      return;
     }
 
-    return items.sort((a, b) => b.score - a.score).slice(0, 15);
-  }, [query, allFiles]);
+    setSearching(true);
+    clearTimeout(debounceRef.current);
+    const id = ++queryIdRef.current;
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const response = await searchAllProjects(trimmed, 'fuzzy');
+        if (id === queryIdRef.current) {
+          setResults(response.results.slice(0, 15));
+          setSearching(false);
+        }
+      } catch {
+        if (id === queryIdRef.current) {
+          setResults([]);
+          setSearching(false);
+        }
+      }
+    }, 200);
+
+    return () => clearTimeout(debounceRef.current);
+  }, [query]);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [query]);
+  }, [results]);
 
   useEffect(() => {
     const el = listRef.current?.children[selectedIndex] as HTMLElement | undefined;
@@ -132,7 +92,7 @@ export function TopHeader({
     (index: number) => {
       const item = results[index];
       if (item) {
-        onFileClick(item.projectId, item.path);
+        onFileClick(item.projectId, item.filePath);
         setQuery('');
         setFocused(false);
         inputRef.current?.blur();
@@ -165,7 +125,7 @@ export function TopHeader({
   const showDropdown = focused && query.trim().length > 0;
 
   return (
-    <header className="flex h-12 shrink-0 items-center border-b border-border bg-background px-4">
+    <header className="relative z-[100] flex h-12 shrink-0 items-center border-b border-border bg-background px-4">
       {/* Left: logo + search */}
       <div className="flex items-center gap-4">
         {showMenu && onMenuClick && (
@@ -189,7 +149,11 @@ export function TopHeader({
                 : 'border-border hover:border-primary/30 hover:bg-muted/50',
             )}
           >
-            <Search className="size-4 shrink-0 text-muted-foreground" />
+            {searching ? (
+              <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
+            ) : (
+              <Search className="size-4 shrink-0 text-muted-foreground" />
+            )}
             <input
               ref={inputRef}
               value={query}
@@ -217,18 +181,22 @@ export function TopHeader({
             )}
           </div>
           {showDropdown && (
-            <div className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-border bg-popover shadow-lg animate-in fade-in-0 zoom-in-95">
-              <div ref={listRef} className="max-h-[300px] overflow-y-auto py-1">
-                {results.length === 0 ? (
+            <div className="absolute left-0 top-full mt-1 w-96 rounded-lg border border-border bg-popover shadow-lg animate-in fade-in-0 zoom-in-95">
+              <div ref={listRef} className="max-h-[350px] overflow-y-auto py-1">
+                {searching && results.length === 0 ? (
                   <div className="px-3 py-4 text-center text-xs text-muted-foreground">
-                    No files found
+                    Searching...
+                  </div>
+                ) : !searching && results.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                    No results found
                   </div>
                 ) : (
                   results.map((item, index) => (
                     <button
-                      key={`${item.projectId}:${item.path}`}
+                      key={`${item.projectId}:${item.filePath}`}
                       className={cn(
-                        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors',
+                        'flex w-full flex-col gap-0.5 px-3 py-1.5 text-left transition-colors',
                         index === selectedIndex
                           ? 'bg-accent text-accent-foreground'
                           : 'text-foreground hover:bg-muted/50',
@@ -236,11 +204,23 @@ export function TopHeader({
                       onClick={() => selectResult(index)}
                       onMouseEnter={() => setSelectedIndex(index)}
                     >
-                      <File className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 truncate font-medium">{item.name}</span>
-                      <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground">
-                        {item.projectName}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <File className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 truncate text-sm font-medium">{item.fileName}</span>
+                        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
+                          {item.projectName}
+                        </span>
+                        {item.matchCount > 0 && (
+                          <span className="shrink-0 rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground">
+                            {item.matchCount}
+                          </span>
+                        )}
+                      </div>
+                      {item.preview && (
+                        <span className="truncate pl-[22px] text-xs text-muted-foreground">
+                          {item.preview}
+                        </span>
+                      )}
                     </button>
                   ))
                 )}
