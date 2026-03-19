@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AutoScrollControls } from '@/components/AutoScrollControls';
+import { EditableZoomPercent } from '@/components/EditableZoomPercent';
 import { ModeToggle } from '@/components/ModeToggle';
 import { cn } from '@/lib/utils';
 
@@ -139,6 +140,7 @@ export interface PaneToolbarProps {
   onFullscreen: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onZoomSet: (value: number) => void;
   onZoomReset: () => void;
   onSave: () => void;
   onSaveAndPreview: () => void;
@@ -170,6 +172,7 @@ export function PaneToolbar(props: PaneToolbarProps) {
     onFullscreen,
     onZoomIn,
     onZoomOut,
+    onZoomSet,
     onZoomReset,
     onSave,
     onSaveAndPreview,
@@ -269,13 +272,14 @@ export function PaneToolbar(props: PaneToolbarProps) {
                 >
                   <ZoomOut className="size-3.5" />
                 </button>
-                <button
-                  className="min-w-[2.5rem] text-center text-[11px] text-muted-foreground tabular-nums select-none hover:text-foreground"
-                  onDoubleClick={(e) => { e.stopPropagation(); onZoomReset(); }}
-                  title="Double-click to reset"
-                >
-                  {Math.round(zoom * 100)}%
-                </button>
+                <EditableZoomPercent
+                  zoom={zoom}
+                  min={0.5}
+                  max={2}
+                  onZoomSet={onZoomSet}
+                  onZoomReset={onZoomReset}
+                  className="text-[11px]"
+                />
                 <button
                   className="rounded p-0.5 hover:bg-accent transition-colors"
                   onClick={(e) => { e.stopPropagation(); onZoomIn(); }}
@@ -365,7 +369,7 @@ export function PaneToolbar(props: PaneToolbarProps) {
               <span className="text-xs font-medium text-amber-500">Unsaved</span>
             )}
           </>
-        ) : !editMode ? (
+        ) : !editMode && !previewOnly ? (
           <Button
             variant="ghost"
             size="icon-sm"

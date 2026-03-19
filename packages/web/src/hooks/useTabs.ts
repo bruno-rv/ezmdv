@@ -167,6 +167,14 @@ function assignTabToFocusedPane(
     };
   }
 
+  if (layout.secondaryTab === null) {
+    return {
+      ...layout,
+      secondaryTab: tab,
+      focusedPane: 'secondary',
+    };
+  }
+
   if (layout.focusedPane === 'primary') {
     if (isSameTab(layout.secondaryTab, tab)) {
       return {

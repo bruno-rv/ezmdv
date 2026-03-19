@@ -662,6 +662,25 @@ function App() {
     [addProject, loadProjectFiles, loadProjects],
   );
 
+  const handleOpenFolder = useCallback(
+    async (folderPath: string) => {
+      try {
+        const name = folderPath.split('/').filter(Boolean).pop() || 'Project';
+        const project = await addProject({
+          name,
+          path: folderPath,
+          source: 'cli',
+        });
+        await loadProjects();
+        await loadProjectFiles(project.id);
+        setAutoExpandProjectId(project.id);
+      } catch (error) {
+        console.error('Open folder failed:', error);
+      }
+    },
+    [addProject, loadProjectFiles, loadProjects],
+  );
+
   const handleCreateFile = useCallback(
     async (projectId: string, filePath: string, content?: string) => {
       try {
@@ -796,6 +815,23 @@ function App() {
       const { [key]: _, ...rest } = zoomLevels;
       setZoomLevels(rest);
       updateState({ zoomLevels: rest }).catch(() => {});
+    },
+    [zoomLevels],
+  );
+
+  const handleZoomSet = useCallback(
+    (projectId: string, filePath: string, value: number) => {
+      const key = `${projectId}:${filePath}`;
+      const clamped = Math.min(2, Math.max(0.5, Math.round(value * 10) / 10));
+      if (clamped === 1) {
+        const { [key]: _, ...rest } = zoomLevels;
+        setZoomLevels(rest);
+        updateState({ zoomLevels: rest }).catch(() => {});
+      } else {
+        const updated = { ...zoomLevels, [key]: clamped };
+        setZoomLevels(updated);
+        updateState({ zoomLevels: updated }).catch(() => {});
+      }
     },
     [zoomLevels],
   );
@@ -976,6 +1012,7 @@ function App() {
             onFullscreen={() => setFullscreenPane(isFullscreen ? null : pane)}
             onZoomIn={() => handleZoomChange(tab.projectId, tab.filePath, +0.1)}
             onZoomOut={() => handleZoomChange(tab.projectId, tab.filePath, -0.1)}
+            onZoomSet={(v: number) => handleZoomSet(tab.projectId, tab.filePath, v)}
             onZoomReset={() => handleZoomReset(tab.projectId, tab.filePath)}
             onSave={() => handleSave()}
             onSaveAndPreview={() => handleSave(true)}
@@ -1212,6 +1249,7 @@ function App() {
           onCreateFile={handleCreateFile}
           onShowShortcuts={() => setShowShortcuts(true)}
           onCreateProject={(name) => addProject({ name, path: '', source: 'upload' })}
+          onOpenFolder={handleOpenFolder}
         />
       )}
 
@@ -1246,6 +1284,7 @@ function App() {
             onOpenFile={handleGraphNodeOpen}
             getZoom={getZoom}
             onZoomChange={handleZoomChange}
+            onZoomSet={handleZoomSet}
             onZoomReset={handleZoomReset}
           />
         ) : splitView ? (
@@ -1317,6 +1356,7 @@ function App() {
           zoom={getZoom(graphPreview.projectId, graphPreview.filePath)}
           onZoomIn={() => handleZoomChange(graphPreview.projectId, graphPreview.filePath, +0.1)}
           onZoomOut={() => handleZoomChange(graphPreview.projectId, graphPreview.filePath, -0.1)}
+          onZoomSet={(v: number) => handleZoomSet(graphPreview.projectId, graphPreview.filePath, v)}
           onZoomReset={() => handleZoomReset(graphPreview.projectId, graphPreview.filePath)}
           onClose={setGraphPreviewNull}
         />

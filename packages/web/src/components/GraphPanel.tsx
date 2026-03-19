@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
-import { X, Search, ZoomIn, ZoomOut, RotateCcw, Minus, Maximize2, Minimize2, SlidersHorizontal } from 'lucide-react';
+import { X, Search, ZoomIn, ZoomOut, Minus, Maximize2, Minimize2, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { ProjectGraph, GraphNode, GraphEdge } from '@/lib/api';
 import { fetchFileContent, searchProjectContent } from '@/lib/api';
 import { MarkdownView } from '@/components/MarkdownView';
+import { EditableZoomPercent } from '@/components/EditableZoomPercent';
 import { cn } from '@/lib/utils';
 import { filterGraphBySearch } from '@/lib/graphFilter';
 import { computeViewBox, clampZoom, WIDTH, HEIGHT, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from '@/lib/graphZoom';
@@ -18,6 +19,7 @@ interface GraphPanelProps {
   onOpenFile: (filePath: string) => void;
   getZoom: (projectId: string, filePath: string) => number;
   onZoomChange: (projectId: string, filePath: string, delta: number) => void;
+  onZoomSet: (projectId: string, filePath: string, value: number) => void;
   onZoomReset: (projectId: string, filePath: string) => void;
 }
 
@@ -147,6 +149,7 @@ export function GraphPanel({
   onOpenFile,
   getZoom,
   onZoomChange,
+  onZoomSet: onZoomSetProp,
   onZoomReset: onZoomResetProp,
 }: GraphPanelProps) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -620,45 +623,11 @@ export function GraphPanel({
               zoom={getZoom(projectId, preview.filePath)}
               onZoomIn={() => onZoomChange(projectId, preview.filePath, +0.1)}
               onZoomOut={() => onZoomChange(projectId, preview.filePath, -0.1)}
+              onZoomSet={(v) => onZoomSetProp(projectId, preview.filePath, v)}
               onZoomReset={() => onZoomResetProp(projectId, preview.filePath)}
               onClose={handlePreviewClose}
             />
           )}
-
-          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-md border border-border bg-background/90 px-1.5 py-1 shadow-sm backdrop-blur-sm">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleZoomOut}
-              disabled={zoom <= MIN_ZOOM}
-              aria-label="Zoom out"
-              title="Zoom out"
-            >
-              <ZoomOut className="size-3.5" />
-            </Button>
-            <span className="min-w-[3rem] text-center text-xs font-medium text-muted-foreground">
-              {Math.round(zoom * 100)}%
-            </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleZoomIn}
-              disabled={zoom >= MAX_ZOOM}
-              aria-label="Zoom in"
-              title="Zoom in"
-            >
-              <ZoomIn className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleZoomReset}
-              aria-label="Reset zoom"
-              title="Reset zoom"
-            >
-              <RotateCcw className="size-3.5" />
-            </Button>
-          </div>
 
           {/* Stats card */}
           <div className="absolute bottom-4 left-4 rounded-lg border border-border bg-card/80 backdrop-blur px-4 py-3 shadow-lg">
@@ -685,6 +654,25 @@ export function GraphPanel({
               <div className="flex items-center justify-between">
                 <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Repulsion</span>
                 <span className="text-xs font-medium text-foreground">1.2k</span>
+              </div>
+            </div>
+            <div className="my-2 h-px bg-border" />
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Zoom</span>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon-sm" onClick={handleZoomOut} disabled={zoom <= MIN_ZOOM} aria-label="Zoom out" title="Zoom out">
+                  <ZoomOut className="size-3.5" />
+                </Button>
+                <EditableZoomPercent
+                  zoom={zoom}
+                  min={MIN_ZOOM}
+                  max={MAX_ZOOM}
+                  onZoomSet={(v) => setZoom(clampZoom(v))}
+                  className="font-medium"
+                />
+                <Button variant="ghost" size="icon-sm" onClick={handleZoomIn} disabled={zoom >= MAX_ZOOM} aria-label="Zoom in" title="Zoom in">
+                  <ZoomIn className="size-3.5" />
+                </Button>
               </div>
             </div>
             <div className="mt-3 flex gap-2">
@@ -728,6 +716,7 @@ function NodePreview({
   projectId,
   onZoomIn,
   onZoomOut,
+  onZoomSet,
   onZoomReset,
   onClose,
 }: {
@@ -736,6 +725,7 @@ function NodePreview({
   zoom: number;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onZoomSet: (value: number) => void;
   onZoomReset: () => void;
   onClose: () => void;
 }) {
@@ -779,13 +769,13 @@ function NodePreview({
                 >
                   <ZoomOut className="size-4" />
                 </Button>
-                <button
-                  className="min-w-[3rem] text-center text-xs text-muted-foreground tabular-nums select-none"
-                  onDoubleClick={onZoomReset}
-                  title="Double-click to reset zoom"
-                >
-                  {Math.round(zoom * 100)}%
-                </button>
+                <EditableZoomPercent
+                  zoom={zoom}
+                  min={0.5}
+                  max={2}
+                  onZoomSet={onZoomSet}
+                  onZoomReset={onZoomReset}
+                />
                 <Button
                   variant="ghost"
                   size="icon-sm"
