@@ -1210,7 +1210,8 @@ function App() {
       {showTopChrome && (
         <TopHeader
           zoom={activeZoom}
-          onSearchClick={() => setCommandPaletteOpen(true)}
+          projects={projects}
+          onFileClick={handleFileClick}
           onMenuClick={() => setSidebarOpen(true)}
           showMenu={showSidebar}
         />
