@@ -356,6 +356,7 @@ export function useTabs() {
 
   const focusPane = useCallback((pane: Pane) => {
     setLayout((prevLayout) => {
+      if (prevLayout.focusedPane === pane) return prevLayout;
       if (pane === 'secondary' && !prevLayout.splitView) {
         return prevLayout;
       }

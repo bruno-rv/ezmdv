@@ -773,34 +773,11 @@ export function Sidebar({
                 <Button
                   variant="outline"
                   className="w-full justify-center gap-2 text-xs font-semibold uppercase tracking-wider"
-                  onClick={() => {
-                    const activeProject = projects.find((p) =>
-                      expandedProjects[p.id],
-                    );
-                    if (activeProject) {
-                      const name = window.prompt('File name (without .md):');
-                      if (name?.trim()) {
-                        onCreateFile(activeProject.id, name.trim() + '.md');
-                      }
-                    } else if (projects.length > 0) {
-                      toggleProject(projects[0].id);
-                      const name = window.prompt('File name (without .md):');
-                      if (name?.trim()) {
-                        onCreateFile(projects[0].id, name.trim() + '.md');
-                      }
-                    }
-                  }}
-                >
-                  <FilePlus className="size-4" />
-                  New File
-                </Button>
-                <button
-                  className="flex w-full items-center justify-center gap-1.5 rounded-md py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Upload className="size-3" />
+                  <Upload className="size-4" />
                   Import
-                </button>
+                </Button>
 
                 <input
                   ref={fileInputRef}

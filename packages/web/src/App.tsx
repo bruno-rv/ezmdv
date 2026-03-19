@@ -954,7 +954,7 @@ function App() {
               'flex h-full flex-col bg-background',
               options.splitContext && 'justify-center px-6 text-center',
             )}
-            onClick={() => focusPane(pane)}
+            onMouseDown={() => focusPane(pane)}
           >
             <div className="mx-auto max-w-sm space-y-2 text-sm text-muted-foreground">
               <p className="text-foreground">Open another markdown to compare side by side.</p>
@@ -973,7 +973,7 @@ function App() {
                 ? 'ring-1 ring-inset ring-primary/25'
                 : 'ring-1 ring-inset ring-border'),
           )}
-          onClick={() => focusPane(pane)}
+          onMouseDown={() => focusPane(pane)}
         >
           <PaneToolbar
             editMode={editMode && !previewOnly}
