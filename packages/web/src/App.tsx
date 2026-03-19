@@ -1213,7 +1213,6 @@ function App() {
           }}
           zoom={activeZoom}
           onSearchClick={() => setCommandPaletteOpen(true)}
-          onSettingsClick={() => setShowShortcuts(true)}
           onMenuClick={() => setSidebarOpen(true)}
           showMenu={showSidebar}
         />

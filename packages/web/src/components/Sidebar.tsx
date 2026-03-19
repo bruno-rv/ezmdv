@@ -114,7 +114,7 @@ export function Sidebar({
   const [extractDropActive, setExtractDropActive] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
-  const [openFolderMode, setOpenFolderMode] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [folderPathValue, setFolderPathValue] = useState('');
   const extractDropCounter = useRef(0);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -905,58 +905,75 @@ export function Sidebar({
                   <FilePlus className="size-4" />
                   New File
                 </Button>
-                <button
-                  className="flex w-full items-center justify-center gap-1.5 rounded-md py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload className="size-3" />
-                  Upload files
-                </button>
-
-                {openFolderMode ? (
-                  <form
-                    className="flex gap-1"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const trimmed = folderPathValue.trim();
-                      if (trimmed && onOpenFolder) {
-                        onOpenFolder(trimmed);
-                        setFolderPathValue('');
-                        setOpenFolderMode(false);
-                      }
-                    }}
-                  >
-                    <input
-                      ref={folderInputRef}
-                      type="text"
-                      className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
-                      placeholder="/path/to/folder"
-                      value={folderPathValue}
-                      onChange={(e) => setFolderPathValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Escape') {
-                          setOpenFolderMode(false);
-                          setFolderPathValue('');
-                        }
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      type="submit"
-                      className="rounded bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
-                    >
-                      Open
-                    </button>
-                  </form>
-                ) : (
+                <div className="relative">
                   <button
                     className="flex w-full items-center justify-center gap-1.5 rounded-md py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-                    onClick={() => setOpenFolderMode(true)}
+                    onClick={() => setImportOpen((v) => !v)}
                   >
-                    <FolderOpen className="size-3" />
-                    Open folder
+                    <Upload className="size-3" />
+                    Import
                   </button>
-                )}
+                  {importOpen && (
+                    <div className="mt-1 rounded-md border border-border bg-popover p-2 shadow-lg space-y-2">
+                      <button
+                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-accent"
+                        onClick={() => {
+                          fileInputRef.current?.click();
+                          setImportOpen(false);
+                        }}
+                      >
+                        <FilePlus className="size-3.5 text-muted-foreground" />
+                        <div className="text-left">
+                          <div className="font-medium">Select files</div>
+                          <div className="text-[10px] text-muted-foreground">Pick .md files to import as copies</div>
+                        </div>
+                      </button>
+                      <div className="h-px bg-border" />
+                      <div className="px-2 py-1">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <FolderOpen className="size-3.5 text-muted-foreground" />
+                          <div>
+                            <div className="text-xs font-medium text-foreground">Open folder</div>
+                            <div className="text-[10px] text-muted-foreground">Reference original files on disk</div>
+                          </div>
+                        </div>
+                        <form
+                          className="flex gap-1"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const trimmed = folderPathValue.trim();
+                            if (trimmed && onOpenFolder) {
+                              onOpenFolder(trimmed);
+                              setFolderPathValue('');
+                              setImportOpen(false);
+                            }
+                          }}
+                        >
+                          <input
+                            ref={folderInputRef}
+                            type="text"
+                            className="flex-1 min-w-0 rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+                            placeholder="/path/to/folder"
+                            value={folderPathValue}
+                            onChange={(e) => setFolderPathValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') {
+                                setImportOpen(false);
+                                setFolderPathValue('');
+                              }
+                            }}
+                          />
+                          <button
+                            type="submit"
+                            className="rounded bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground hover:bg-primary/90"
+                          >
+                            Open
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <input
                   ref={fileInputRef}

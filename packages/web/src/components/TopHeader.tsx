@@ -1,8 +1,5 @@
 import {
   Search,
-  Maximize2,
-  Settings,
-  Share2,
   Menu,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,7 +12,6 @@ interface TopHeaderProps {
   onModeChange: (mode: AppMode) => void;
   zoom: number;
   onSearchClick: () => void;
-  onSettingsClick: () => void;
   onMenuClick?: () => void;
   showMenu?: boolean;
 }
@@ -25,7 +21,6 @@ export function TopHeader({
   onModeChange,
   zoom,
   onSearchClick,
-  onSettingsClick,
   onMenuClick,
   showMenu,
 }: TopHeaderProps) {
@@ -85,22 +80,13 @@ export function TopHeader({
         </button>
       </div>
 
-      {/* Right: zoom + actions */}
+      {/* Right: zoom indicator */}
       <div className="ml-auto flex items-center gap-1">
         {zoom !== 1 && (
           <span className="mr-1 rounded bg-muted/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Zoom {Math.round(zoom * 100)}%
           </span>
         )}
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onClick={onSettingsClick}
-          aria-label="Settings"
-          title="Settings"
-        >
-          <Settings className="size-4" />
-        </Button>
       </div>
     </header>
   );
